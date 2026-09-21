@@ -637,6 +637,35 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
         return;
     }
 
+    if( a_request->m_continue_flag )
+    {
+        /**
+         * Continuation flag set: more configuration fragments will follow.
+         * According to L2CAP spec, every CONFIGURATION_REQ must be responded.
+         * Reply with Success and empty options now; full validation and negotiation
+         * will be performed after receiving the final fragment (continue_flag = 0).
+         */
+        LogUtilInfo() << "cache continue configuration options,"
+            " we will complete negotiation after receiving final fragment.";
+        get_statemachine().cache_continue_config_options( a_request->m_options );
+        std::vector<channel_config_option> empty_config;
+        get_statemachine().m_signaling_channel->send_config_response
+            (
+            a_request->m_identifier,
+            get_statemachine().m_remote_channel_id,
+            0x00,
+            channel_config_result::success,
+            empty_config
+            );
+        return;
+    }
+
+    if( !get_statemachine().m_cached_incoming_continue_configs.empty() )
+    {
+        get_statemachine().cache_continue_config_options( a_request->m_options );
+        a_request->m_options = std::move( get_statemachine().m_cached_incoming_continue_configs );
+    }
+
     if( !callbacks.m_handle_module.empty() )
     {
         std::shared_ptr<executable_task> task;
@@ -1434,6 +1463,30 @@ void l2cap_channel_statemachine::send_completed_acl_packet( std::shared_ptr<hci_
 void l2cap_channel_statemachine::send_disconnect_request_to_remote()
 {
     m_signaling_channel->send_disconnect_request( m_remote_channel_id, m_local_channel_id );
+}
+
+void l2cap_channel_statemachine::cache_continue_config_options( std::vector<channel_config_option> const& a_options )
+{
+    for( const auto& new_opt : a_options )
+    {
+        // Search existing cached option with same type
+        auto found = std::find_if( m_cached_incoming_continue_configs.begin(), m_cached_incoming_continue_configs.end(),
+            [&new_opt]( const channel_config_option& cached )
+            {
+                return cached.m_type == new_opt.m_type;
+            } );
+
+        if( found != m_cached_incoming_continue_configs.end() )
+        {
+            // Same option type exists, overwrite with latest value
+            *found = new_opt;
+        }
+        else
+        {
+            // New option type, append to cache
+            m_cached_incoming_continue_configs.push_back( new_opt );
+        }
+    }
 }
 
 }

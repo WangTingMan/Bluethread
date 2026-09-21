@@ -422,6 +422,15 @@ private:
 
     void send_disconnect_request_to_remote();
 
+    /**
+     * @brief Merge parsed config options from fragmented L2CAP CONFIGURATION_REQ into cached list.
+     * If an option of the same type already exists, overwrite with the newly received value.
+     * This function is used for continuation flag segmented configuration request.
+     *
+     * @param a_options Parsed options from current CONFIGURATION_REQ fragment
+     */
+    void cache_continue_config_options( std::vector<channel_config_option> const& a_options );
+
     uint16_t m_connection_handle = 0x00;
     uint16_t m_local_channel_id = 0x00;
     uint16_t m_remote_channel_id = 0x00;
@@ -430,6 +439,15 @@ private:
     l2cap_callbacks m_callbacks;
     std::shared_ptr<l2cap_signaling> m_signaling_channel;
     std::vector<channel_config_option> m_local_config_options;
+
+    /**
+     * @brief Caches partial configuration options from L2CAP CONFIGURATION_REQ with continuation flag set.
+     *
+     * When receiving fragmented config requests (continuation flag = 1), store parsed options temporarily.
+     * After all fragments are received (continuation flag = 0), process all cached options together.
+     * And need clear this container if we already completed configuration.
+     */
+    std::vector<channel_config_option> m_cached_incoming_continue_configs;
 };
 
 }

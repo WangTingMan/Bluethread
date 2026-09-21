@@ -13,6 +13,7 @@
  *
  * Commercial closed-source licenses are available upon request.
  */
+#include "endian_convert.h"
 
 #include "l2cap_channel_statemachine.h"
 #include "l2cap_internal_task.h"
@@ -155,7 +156,16 @@ bool l2cap_channel_close_state::handle_event
         switch( event_->m_channel_pkt->m_signaling_code )
         {
         case signaling_code::l2cap_connection_req:
-            handle_signaling_request( std::static_pointer_cast<connection_request>( event_->m_channel_pkt ) );
+            handle_signaling_request( std::static_pointer_cast<connection_request>
+                ( event_->m_channel_pkt ) );
+            break;
+        case signaling_code::l2cap_configuration_req:
+            handle_signaling_request( std::static_pointer_cast<l2cap_config_request>
+                ( event_->m_channel_pkt ) );
+            break;
+        case signaling_code::l2cap_disconnection_req:
+            handle_signaling_request( std::static_pointer_cast<l2cap_disconnect_request>
+                ( event_->m_channel_pkt ) );
             break;
         default:
             LogUtilError() << "signaling code ignored.";
@@ -168,44 +178,61 @@ bool l2cap_channel_close_state::handle_event
     case l2cap_channel_event::event_type::open_channel_request:
         send_connection_request_to_remote();
         break;
+    case l2cap_channel_event::event_type::channel_sdu_pkt_from_upper:
+        /*We ignore this event silently.*/
+        break;
     default:
-        LogUtilDebug() << "Ignore this event in close state." << static_cast<uint16_t>( event_->m_type );
+        LogUtilDebug() << "Ignore this event in close state." << static_cast<uint16_t>
+            ( event_->m_type );
         break;
     }
 
     return true;
 }
 
-void l2cap_channel_close_state::handle_signaling_request( std::shared_ptr<connection_request> a_requst )
+void l2cap_channel_close_state::handle_signaling_request
+    (
+    std::shared_ptr<connection_request> a_requst
+    )
 {
     auto& callbacks = get_statemachine().m_callbacks;
     if( !callbacks.m_coming_connection_callback )
     {
         LogUtilError() << "No connection callback set. reject coming connection request.";
         get_statemachine().m_signaling_channel->send_connection_response
-            ( a_requst->m_identifier, 0x00, a_requst->m_source_cid, connection_req_result::connection_refused_no_resource,
-            connection_req_refused_status::refused_no_more_info );
+            (
+            a_requst->m_identifier,
+            0x00,
+            a_requst->m_source_cid,
+            connection_req_result::connection_refused_not_support,
+            connection_req_refused_status::refused_no_more_info
+            );
         return;
     }
 
     get_statemachine().m_signaling_channel->send_connection_response
-        ( a_requst->m_identifier, 0x00, a_requst->m_source_cid, connection_req_result::connection_pending,
-            connection_req_refused_status::refused_no_more_info );
+        ( a_requst->m_identifier, 0x00, a_requst->m_source_cid,
+          connection_req_result::connection_pending,
+          connection_req_refused_status::refused_no_more_info
+        );
 
     if( !callbacks.m_handle_module.empty() )
     {
         std::shared_ptr<executable_task> task;
         task = std::make_shared<executable_task>();
-        task->set_fun( std::bind( callbacks.m_coming_connection_callback, a_requst ), callbacks.m_handle_module );
+        task->set_fun( std::bind( callbacks.m_coming_connection_callback, a_requst ),
+            callbacks.m_handle_module );
         task->set_source_module( l2cap_module::s_l2cap_module_name );
-        framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+        framework_manager::get_instance().get_thread_manager().post_task( task,
+            framework::source_here );
     }
     else
     {
         callbacks.m_coming_connection_callback( a_requst );
     }
 
-    auto state = get_statemachine().find_state( static_cast<uint32_t>( l2cap_channel_state_type::wait_connect ) );
+    auto state = get_statemachine().find_state( static_cast<uint32_t>(
+        l2cap_channel_state_type::wait_connect ) );
     auto wait_state = std::static_pointer_cast<l2cap_channel_wait_connect_state>( state );
     wait_state->set_original_request( a_requst );
 
@@ -213,7 +240,39 @@ void l2cap_channel_close_state::handle_signaling_request( std::shared_ptr<connec
 
 }
 
-void l2cap_channel_close_state::accept_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event )
+void l2cap_channel_close_state::handle_signaling_request( std::shared_ptr<l2cap_config_request> a_requst )
+{
+    /**
+    * Channel is in Close state when receiving Configuration Request.
+    * Reject the command with Invalid CID reason.
+    */
+    uint8_t buffer[4] = { 0 };
+    write_le16( buffer, a_requst->m_destionation_cid );
+    write_le16( buffer, a_requst->m_source_cid );
+    get_statemachine().m_signaling_channel->send_reject_rsp
+        (
+        a_requst->m_identifier,
+        l2cap_command_reject_reason::invalid_cid,
+        buffer,
+        sizeof( buffer )
+        );
+}
+
+void l2cap_channel_close_state::handle_signaling_request( std::shared_ptr<l2cap_disconnect_request> a_requst )
+{
+    LogUtilInfo() << "reply disconnect request with close state.";
+    get_statemachine().m_signaling_channel->send_disconnect_response
+        (
+        a_requst->m_identifier,
+        a_requst->m_destination_cid,
+        a_requst->m_source_cid
+        );
+}
+
+void l2cap_channel_close_state::accept_connection_request
+    (
+    std::shared_ptr<l2cap_channel_event> const& a_event
+    )
 {
     if( !( a_event->m_channel_pkt ) )
     {

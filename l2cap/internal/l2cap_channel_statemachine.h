@@ -87,6 +87,10 @@ public:
 
     void handle_signaling_request( std::shared_ptr<connection_request> a_requst );
 
+    void handle_signaling_request( std::shared_ptr<l2cap_config_request> a_requst );
+
+    void handle_signaling_request( std::shared_ptr<l2cap_disconnect_request> a_requst );
+
     void accept_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event );
 
     void send_connection_request_to_remote();

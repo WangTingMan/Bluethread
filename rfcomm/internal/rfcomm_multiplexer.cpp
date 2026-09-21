@@ -1045,6 +1045,10 @@ void rfcomm_multipexer::connect()
 
 void rfcomm_multipexer::config_local_channel( uint16_t a_acl_handle, uint16_t a_remote_cid )
 {
+    /**
+    * TODO: Upper layer shall send L2CAP CONFIGURATION_REQ once channel transitions
+    * to wait_config state or other suitable state if configuration has not been performed.
+    */
     std::vector<channel_config_option> channel_cfg_options;
     channel_config_option cfg;
     cfg.m_type = channel_config_option_type::mtu;

@@ -524,6 +524,9 @@ struct l2cap_callbacks
      * Indicate that the channel connection state has been changed.
      * Parameters: remote address, local cid, remote cid, and connection state.
      * After state changed to opened, then upper layer can send SDU data.
+     *
+     * @note Upon receiving the wait_config state notification, upper layer shall immediately
+     * send a configuration request to the L2CAP layer.
      */
     std::function<void( bluetooth_address, uint16_t, uint16_t, l2cap_channel_state_type, l2cap_channel_close_reason )> m_channel_state_changed_callback;
 

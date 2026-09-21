@@ -317,7 +317,10 @@ bool l2cap_channel_wait_connect_state::handle_event( uint32_t event, void* p_dat
     return true;
 }
 
-bool l2cap_channel_wait_connect_state::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
+bool l2cap_channel_wait_connect_state::handle_event
+    (
+    std::shared_ptr<state_machine::abstract_event> const& a_event
+    )
 {
     std::shared_ptr<l2cap_channel_event> event_;
     event_ = std::static_pointer_cast< l2cap_channel_event >( a_event );
@@ -392,7 +395,10 @@ void l2cap_channel_wait_connect_state::handle_timer_expired( uint32_t a_timer_id
     transition_to_state( l2cap_channel_state_type::close_state );
 }
 
-void l2cap_channel_wait_connect_state::accept_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event )
+void l2cap_channel_wait_connect_state::accept_connection_request
+    (
+    std::shared_ptr<l2cap_channel_event> const& a_event
+    )
 {
     if( !( a_event->m_channel_pkt ) )
     {
@@ -412,7 +418,10 @@ void l2cap_channel_wait_connect_state::accept_connection_request( std::shared_pt
     transition_to_state( l2cap_channel_state_type::wait_config );
 }
 
-void l2cap_channel_wait_connect_state::reject_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event )
+void l2cap_channel_wait_connect_state::reject_connection_request
+    (
+    std::shared_ptr<l2cap_channel_event> const& a_event
+    )
 {
     if( !( a_event->m_channel_pkt ) )
     {
@@ -1120,7 +1129,10 @@ bool l2cap_channel_wait_connect_rsp_state::handle_event( uint32_t event, void* p
     return true;
 }
 
-bool l2cap_channel_wait_connect_rsp_state::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
+bool l2cap_channel_wait_connect_rsp_state::handle_event
+    (
+    std::shared_ptr<state_machine::abstract_event> const& a_event
+    )
 {
     std::shared_ptr<l2cap_channel_event> event_;
     event_ = std::static_pointer_cast< l2cap_channel_event >( a_event );
@@ -1152,7 +1164,10 @@ void l2cap_channel_wait_connect_rsp_state::on_exit()
 
 }
 
-void l2cap_channel_wait_connect_rsp_state::handle_signaling_packet( std::shared_ptr<signaling_channel_packet> const& a_channel_pkt )
+void l2cap_channel_wait_connect_rsp_state::handle_signaling_packet
+    (
+    std::shared_ptr<signaling_channel_packet> const& a_channel_pkt
+    )
 {
     if( !a_channel_pkt )
     {
@@ -1181,6 +1196,22 @@ void l2cap_channel_wait_connect_rsp_state::handle_signaling_packet( std::shared_
                 transition_to_state( l2cap_channel_state_type::close_state );
                 break;
             }
+        }
+        break;
+    case signaling_code::l2cap_configuration_req:
+        {
+            std::shared_ptr<l2cap_config_request> detail_request;
+            detail_request = std::static_pointer_cast<l2cap_config_request>( a_channel_pkt );
+            uint8_t buffer[4] = { 0 };
+            write_le16( buffer, detail_request->m_destionation_cid );
+            write_le16( buffer, detail_request->m_source_cid );
+            get_statemachine().m_signaling_channel->send_reject_rsp
+                (
+                detail_request->m_identifier,
+                l2cap_command_reject_reason::invalid_cid,
+                buffer,
+                sizeof( buffer )
+                );
         }
         break;
     default:

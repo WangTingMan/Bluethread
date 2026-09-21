@@ -36,3 +36,21 @@ All protocol events, incoming HCI packets and state machine transitions are wrap
 - Robust packet parser with malformed packet validation, truncated payload detection and proper rejection for invalid signaling to defend against abnormal remote packets.
 - Fine-grained feature trimming to reduce memory footprint for resource-limited embedded targets.
 - Clear separation between protocol business logic and platform-dependent code, lowering maintenance cost for multi-product mass deployment.
+
+## License
+Bluethread is dual-licensed:
+1. **GNU General Public License v3.0 (GPLv3)** — Free for open-source projects.
+   See the [LICENSE](./LICENSE) file for full GPLv3 terms.
+2. **Commercial Proprietary License** — For closed-source commercial product integration.
+   If you intend to embed Bluethread into closed-source firmware/software for commercial sale, please contact the author to obtain a commercial license.
+
+## Disclaimer
+This software is provided as-is, without warranty of any kind, express or implied.
+The author shall not be liable for any damages arising from the use of this stack.
+
+## Contributing
+By submitting pull requests to this repository, you agree that your contributions are licensed under both GPLv3 and the commercial proprietary license of Bluethread.
+
+Note: GPLv3 has copyleft requirements. If you statically link this stack into your product and distribute it, your full product must comply with GPLv3.
+
+Copyright (C) 2026 wangfei <kingpin58@163.com>

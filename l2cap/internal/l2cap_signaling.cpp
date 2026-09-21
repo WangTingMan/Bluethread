@@ -749,6 +749,11 @@ void l2cap_signaling::handle_config_request( std::vector<uint8_t> const& a_raw_h
     uint8_t const* p_config = a_raw_hci.data() + m_sig_header.header_size() + 4;
     auto [options, unknown_types, is_truncated] = parse_channel_config( p_config, signal_data_length - 4 );
 
+    if( is_truncated )
+    {
+        LogUtilError() << "Remote device send an invalid configuration packet";
+    }
+
     std::shared_ptr<l2cap_config_request> request;
     request = std::make_shared<l2cap_config_request>();
     request->m_destionation_cid = dest_cid;
@@ -758,6 +763,7 @@ void l2cap_signaling::handle_config_request( std::vector<uint8_t> const& a_raw_h
     request->m_acl_handle = acl_handle;
     request->m_continue_flag = continue_flag;
     request->set_sender( m_remote_address );
+    request->m_is_truncted = is_truncated;
     request->m_remote_edr_ext_flow_support = remote_edr_ext_flow_support;
     auto the_controller = framework::framework_manager::get_instance().get_info_manager()
         .get_detail_information<controller>( controller::s_information_name );

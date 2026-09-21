@@ -398,6 +398,7 @@ public:
     uint16_t m_acl_handle = 0x00;
     bool m_continue_flag = 0x00;
     bool m_remote_edr_ext_flow_support = false; // Indicate that remote device support extended flow option
+    bool m_is_truncted = false;
     std::vector<uint8_t> m_unkown_option_types;
 };
 

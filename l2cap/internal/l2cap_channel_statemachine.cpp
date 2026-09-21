@@ -609,6 +609,7 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
 
     a_request->m_source_cid = get_statemachine().m_remote_channel_id;
 
+    bool need_reject = false;
     if( a_request->m_continue_flag &&
         a_request->m_remote_edr_ext_flow_support &&
         get_statemachine().m_signaling_channel->get_acl_type() == acl_type::br_edr_acl &&
@@ -623,10 +624,16 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
          * A packet with Continuation flag set to 1 is treated as invalid configuration parameter.
          * Respond with CONFIGURATION_RSP to reject this configuration negotiation.
          */
+        need_reject = true;
         LogUtilError() << "Remote device should not use continue flag when support ext-flow";
+    }
+
+    if( need_reject || a_request->m_is_truncted )
+    {
+        LogUtilError() << "reject remote device's configuration request.";
         get_statemachine().m_signaling_channel->send_config_response
             ( a_request->m_identifier, get_statemachine().m_remote_channel_id, 0x00,
-              channel_config_result::unacceptable_parameters_failed, a_request->m_options );
+            channel_config_result::unacceptable_parameters_failed, a_request->m_options );
         return;
     }
 

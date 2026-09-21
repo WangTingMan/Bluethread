@@ -19,8 +19,8 @@
 #include "framework/lendable_element.h"
 #include "abstract_hci_interface.h"
 #include "hci_module.h"
-#include "..\include\data_element.h"
-#include "..\include\common.h"
+#include "../include/data_element.h"
+#include "../include/common.h"
 
 #include <list>
 

@@ -15,9 +15,9 @@
  */
 
 #pragma once
-#include "..\framework\abstract_module.h"
-#include "..\framework\lendable_element.h"
-#include "..\framework\abstract_task.h"
+#include "../framework/abstract_module.h"
+#include "../framework/lendable_element.h"
+#include "../framework/abstract_task.h"
 #include "data_element.h"
 #include "common.h"
 #include "pairing_manager.h"

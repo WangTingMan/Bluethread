@@ -19,14 +19,14 @@
 #include "rfcomm_common.h"
 #include "stack/stack_manager.h"
 
-#include "framework\log_util.h"
-#include "framework\framework_event.h"
-#include "framework\internal\platform.h"
-#include "framework\framework_manager.h"
-#include "framework\executable_task.h"
+#include "framework/log_util.h"
+#include "framework/framework_event.h"
+#include "framework/internal/platform.h"
+#include "framework/framework_manager.h"
+#include "framework/executable_task.h"
 
-#include "..\sdp\sdp_common.h"
-#include "..\sdp\sdp_module.h"
+#include "../sdp/sdp_common.h"
+#include "../sdp/sdp_module.h"
 
 static constexpr uint8_t s_spp_port_start = 10;
 

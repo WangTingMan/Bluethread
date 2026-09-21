@@ -19,12 +19,12 @@
 #include "endian_convert.h"
 #include "../rfcomm_module.h"
 
-#include "..\l2cap\l2cap_module.h"
-#include "..\common\acl_connections_db.h"
+#include "../l2cap/l2cap_module.h"
+#include "../common/acl_connections_db.h"
 
-#include "framework\log_util.h"
-#include "framework\framework_manager.h"
-#include "framework\timer_module.h"
+#include "framework/log_util.h"
+#include "framework/framework_manager.h"
+#include "framework/timer_module.h"
 
 #include <functional>
 

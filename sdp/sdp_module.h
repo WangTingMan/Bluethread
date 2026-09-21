@@ -15,10 +15,10 @@
  */
 
 #pragma once
-#include "..\framework\abstract_module.h"
-#include "..\framework\abstract_task.h"
+#include "../framework/abstract_module.h"
+#include "../framework/abstract_task.h"
 
-#include "..\l2cap\l2cap_common.h"
+#include "../l2cap/l2cap_common.h"
 
 #include "data_element.h"
 #include "sdp_common.h"

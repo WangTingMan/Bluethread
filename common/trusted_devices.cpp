@@ -15,11 +15,11 @@
  */
 
 #include "trusted_devices.h"
-#include "stack\stack_manager.h"
+#include "stack/stack_manager.h"
 
-#include "framework\framework_manager.h"
-#include "framework\executable_task.h"
-#include "framework\log_util.h"
+#include "framework/framework_manager.h"
+#include "framework/executable_task.h"
+#include "framework/log_util.h"
 
 #include <memory>
 #include <vector>

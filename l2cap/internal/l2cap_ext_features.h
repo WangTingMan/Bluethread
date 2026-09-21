@@ -15,7 +15,7 @@
  */
 
 #pragma once    
-#include "..\common\stream_writer.h"
+#include "../common/stream_writer.h"
 
 #include <cstdint>
 #include <string>

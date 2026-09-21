@@ -15,9 +15,9 @@
  */
 
 #pragma once
-#include "..\common\protocol_headers.h"
+#include "../common/protocol_headers.h"
 
-#include "..\l2cap_common.h"
+#include "../l2cap_common.h"
 
 namespace bluetooth
 {

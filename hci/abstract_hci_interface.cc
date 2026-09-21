@@ -15,12 +15,12 @@
  */
 
 #include "abstract_hci_interface.h"
-#include "framework\log_util.h"
-#include "framework\abstract_task.h"
-#include "framework\framework_manager.h"
-#include "framework\thread_manager.h"
+#include "framework/log_util.h"
+#include "framework/abstract_task.h"
+#include "framework/framework_manager.h"
+#include "framework/thread_manager.h"
 #include "hci_module.h"
-#include "..\include\data_element.h"
+#include "../include/data_element.h"
 
 namespace bluetooth
 {

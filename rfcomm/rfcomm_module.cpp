@@ -16,14 +16,14 @@
 
 #include "rfcomm_module.h"
 
-#include "framework\log_util.h"
-#include "framework\framework_event.h"
-#include "framework\framework_manager.h"
+#include "framework/log_util.h"
+#include "framework/framework_event.h"
+#include "framework/framework_manager.h"
 
-#include "..\l2cap\l2cap_module.h"
-#include "..\l2cap\l2cap_common.h"
+#include "../l2cap/l2cap_module.h"
+#include "../l2cap/l2cap_common.h"
 
-#include "..\common\acl_connections_db.h"
+#include "../common/acl_connections_db.h"
 
 #include "endian_convert.h"
 

@@ -17,7 +17,7 @@
 #include "sdp_protocol.h"
 #include "endian_convert.h"
 
-#include "framework\log_util.h"
+#include "framework/log_util.h"
 
 namespace bluetooth
 {

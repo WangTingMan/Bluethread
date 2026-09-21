@@ -21,9 +21,9 @@
 #include "rfcomm/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
 
-#include "framework\framework_manager.h"
-#include "framework\framework_event.h"
-#include "framework\log_util.h"
+#include "framework/framework_manager.h"
+#include "framework/framework_event.h"
+#include "framework/log_util.h"
 
 #include <vector>
 #include <string>

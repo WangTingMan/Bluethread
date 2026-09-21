@@ -17,9 +17,9 @@
 #include "rfcomm_port.h"
 #include "../rfcomm_module.h"
 
-#include "framework\log_util.h"
-#include "framework\framework_manager.h"
-#include "framework\executable_task.h"
+#include "framework/log_util.h"
+#include "framework/framework_manager.h"
+#include "framework/executable_task.h"
 
 static constexpr bool s_local_support_credit = true;
 static constexpr uint8_t s_local_credit_init_value = 0x07;

@@ -15,7 +15,7 @@
  */
 
 #include "l2cap_signaling_header.h"
-#include "..\..\common\stream_writer.h"
+#include "../../common/stream_writer.h"
 
 namespace bluetooth
 {

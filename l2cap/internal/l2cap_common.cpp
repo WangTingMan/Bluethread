@@ -14,11 +14,11 @@
  * Commercial closed-source licenses are available upon request.
  */
 
-#include "..\l2cap_common.h"
+#include "../l2cap_common.h"
 #include "endian_convert.h"
-#include "framework\log_util.h"
+#include "framework/log_util.h"
 
-#include "..\..\common\stream_writer.h"
+#include "../../common/stream_writer.h"
 
 namespace bluetooth
 {

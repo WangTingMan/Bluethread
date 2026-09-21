@@ -15,24 +15,24 @@
  */
 
 #include "gap_module.h"
-#include "..\hci\hci_command_maker.h"
-#include "..\hci\hci_module.h"
-#include "..\hci\controller_module.h"
-#include "..\utils\data_type_parser.h"
+#include "../hci/hci_command_maker.h"
+#include "../hci/hci_module.h"
+#include "../hci/controller_module.h"
+#include "../utils/data_type_parser.h"
 #include "endian_convert.h"
 #include "bluetooth_address.h"
 #include "class_of_device.h"
-#include "..\common\controller.h"
-#include "..\common\device_manager.h"
-#include "..\common\bluetooth_common_event.h"
-#include "..\common\trusted_devices.h"
-#include "stack\stack_manager.h"
+#include "../common/controller.h"
+#include "../common/device_manager.h"
+#include "../common/bluetooth_common_event.h"
+#include "../common/trusted_devices.h"
+#include "stack/stack_manager.h"
 
 #include "framework/log_util.h"
-#include "framework\framework_manager.h"
-#include "framework\thread_manager.h"
-#include "framework\framework_event.h"
-#include "framework\executable_task.h"
+#include "framework/framework_manager.h"
+#include "framework/thread_manager.h"
+#include "framework/framework_event.h"
+#include "framework/executable_task.h"
 
 #include <future>
 

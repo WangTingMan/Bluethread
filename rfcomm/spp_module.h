@@ -15,10 +15,10 @@
  */
 
 #pragma once
-#include "..\framework\abstract_module.h"
-#include "..\framework\lendable_element.h"
-#include "..\framework\abstract_task.h"
-#include "..\common\bluetooth_common_event.h"
+#include "../framework/abstract_module.h"
+#include "../framework/lendable_element.h"
+#include "../framework/abstract_task.h"
+#include "../common/bluetooth_common_event.h"
 
 #include "uuid.h"
 #include "spp_connection.h"

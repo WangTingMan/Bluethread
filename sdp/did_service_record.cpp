@@ -15,7 +15,7 @@
  */
 
 #include "did_service_record.h"
-#include "..\framework\internal\platform.h"
+#include "../framework\internal/platform.h"
 
 namespace bluetooth
 {

@@ -15,10 +15,10 @@
  */
 
 #include "hci_snoop_module.h"
-#include "..\include\endian_convert.h" 
-#include "framework\log_util.h"
-#include "framework\internal\platform.h"
-#include "framework\framework_event.h"
+#include "../include/endian_convert.h" 
+#include "framework/log_util.h"
+#include "framework/internal/platform.h"
+#include "framework/framework_event.h"
 #include "framework/framework_manager.h"
 
 #ifndef HCI_LOG_FOLDER

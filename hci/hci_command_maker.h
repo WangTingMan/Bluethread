@@ -19,7 +19,7 @@
 #include "data_element.h"
 #include "hci_defs.h"
 #include "bluetooth_address.h"
-#include "..\common\controller.h"
+#include "../common/controller.h"
 
 #include <memory>
 #include <string>

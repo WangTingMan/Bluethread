@@ -18,7 +18,7 @@
 #include "sdp_self_service_record.h"
 #include "did_service_record.h"
 
-#include "framework\log_util.h"
+#include "framework/log_util.h"
 
 namespace bluetooth
 {

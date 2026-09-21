@@ -15,7 +15,7 @@
  */
 
 #include "spp_connection.h"
-#include "framework\log_util.h"
+#include "framework/log_util.h"
 
 namespace bluetooth
 {

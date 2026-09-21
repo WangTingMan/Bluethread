@@ -24,8 +24,8 @@
 #include "rfcomm_port.h"
 #include "bluetooth_address.h"
 
-#include "..\common\state_machine.h"
-#include "..\l2cap\l2cap_common.h"
+#include "../common/state_machine.h"
+#include "../l2cap/l2cap_common.h"
 
 namespace bluetooth
 {

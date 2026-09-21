@@ -17,7 +17,7 @@
 #pragma once
 #include "sdp_common.h"
 #include "bluetooth_address.h"
-#include "..\common\protocol_headers.h"
+#include "../common/protocol_headers.h"
 
 #include <cstdint>
 #include <vector>

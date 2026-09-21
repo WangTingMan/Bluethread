@@ -16,9 +16,9 @@
 
 #pragma once
 
-#include "..\framework\abstract_module.h"
-#include "..\framework\lendable_element.h"
-#include "..\framework\abstract_task.h"
+#include "../framework/abstract_module.h"
+#include "../framework/lendable_element.h"
+#include "../framework/abstract_task.h"
 #include "abstract_hci_interface.h"
 #include "data_element.h"
 #include "command_credit_reader.h"

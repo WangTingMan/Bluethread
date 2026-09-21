@@ -24,7 +24,7 @@
 #include "../rfcomm_protocol.h"
 #include "../rfcomm_common.h"
 
-#include "..\common\state_machine.h"
+#include "../common/state_machine.h"
 
 namespace bluetooth
 {

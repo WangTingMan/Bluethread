@@ -20,15 +20,15 @@
 #include "endian_convert.h"
 #include "sdp_common.h"
 
-#include "framework\log_util.h"
-#include "framework\module_manager.h"
-#include "framework\framework_manager.h"
-#include "framework\executable_task.h"
-#include "framework\framework_event.h"
+#include "framework/log_util.h"
+#include "framework/module_manager.h"
+#include "framework/framework_manager.h"
+#include "framework/executable_task.h"
+#include "framework/framework_event.h"
 
-#include "..\common\acl_connections_db.h"
-#include "..\l2cap\l2cap_module.h"
-#include "..\l2cap\l2cap_common.h"
+#include "../common/acl_connections_db.h"
+#include "../l2cap/l2cap_module.h"
+#include "../l2cap/l2cap_common.h"
 
 #include <functional>
 

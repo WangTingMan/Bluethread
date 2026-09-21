@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include "..\framework\abstract_info.h"
+#include "../framework/abstract_info.h"
 
 #include "remote_device.h"
 

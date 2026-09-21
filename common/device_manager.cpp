@@ -17,10 +17,10 @@
 #include "device_manager.h"
 #include "stack/stack_manager.h"
 
-#include "framework\executable_task.h"
-#include "framework\framework_manager.h"
-#include "framework\abstract_module.h"
-#include "framework\log_util.h"
+#include "framework/executable_task.h"
+#include "framework/framework_manager.h"
+#include "framework/abstract_module.h"
+#include "framework/log_util.h"
 
 
 namespace

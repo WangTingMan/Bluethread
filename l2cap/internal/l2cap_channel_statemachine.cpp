@@ -306,7 +306,11 @@ void l2cap_channel_close_state::send_connection_request_to_remote()
     transition_to_state( l2cap_channel_state_type::wait_connect_rsp );
 }
 
-l2cap_channel_wait_connect_state::l2cap_channel_wait_connect_state( l2cap_channel_statemachine& a_sm, uint32_t a_state_id )
+l2cap_channel_wait_connect_state::l2cap_channel_wait_connect_state
+    (
+    l2cap_channel_statemachine& a_sm,
+    uint32_t a_state_id
+    )
     : l2cap_channel_base_state( a_sm, a_state_id )
 {
 
@@ -387,10 +391,12 @@ void l2cap_channel_wait_connect_state::set_original_request( std::shared_ptr<con
 
 void l2cap_channel_wait_connect_state::handle_timer_expired( uint32_t a_timer_id, std::string a_name )
 {
-    LogUtilError() << "Waiting upper layer to accept or reject connection request timeout. Reject this connection request.";
+    LogUtilError() << "Waiting upper layer to accept or reject connection request timeout."
+        " Reject this connection request.";
     get_statemachine().m_signaling_channel->send_connection_response
             ( m_original_request->m_identifier, 0x00, m_original_request->m_source_cid,
-            connection_req_result::connection_refused_no_resource, connection_req_refused_status::refused_no_more_info );
+            connection_req_result::connection_refused_no_resource,
+            connection_req_refused_status::refused_no_more_info );
 
     transition_to_state( l2cap_channel_state_type::close_state );
 }
@@ -449,7 +455,11 @@ void l2cap_channel_wait_connect_state::reject_connection_request
     transition_to_state( l2cap_channel_state_type::close_state );
 }
 
-l2cap_channel_wait_config_state::l2cap_channel_wait_config_state( l2cap_channel_statemachine& a_sm, uint32_t a_state_id )
+l2cap_channel_wait_config_state::l2cap_channel_wait_config_state
+    (
+    l2cap_channel_statemachine& a_sm,
+    uint32_t a_state_id
+    )
     : l2cap_channel_base_state( a_sm, a_state_id )
 {
 
@@ -460,7 +470,10 @@ bool l2cap_channel_wait_config_state::handle_event( uint32_t event, void* p_data
     return true;
 }
 
-bool l2cap_channel_wait_config_state::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
+bool l2cap_channel_wait_config_state::handle_event
+    (
+    std::shared_ptr<state_machine::abstract_event> const& a_event
+    )
 {
     std::shared_ptr<l2cap_channel_event> event_;
     event_ = std::static_pointer_cast< l2cap_channel_event >( a_event );
@@ -498,7 +511,8 @@ bool l2cap_channel_wait_config_state::handle_event( std::shared_ptr<state_machin
         switch( event_->m_channel_pkt->m_signaling_code )
         {
         case signaling_code::l2cap_configuration_req:
-            accept_coming_config_request( std::static_pointer_cast< l2cap_config_request >( event_->m_channel_pkt ) );
+            accept_coming_config_request( std::static_pointer_cast< l2cap_config_request >
+                ( event_->m_channel_pkt ) );
             break;
         default:
             LogUtilError() << "signaling code ignored: " << event_->m_channel_pkt->m_signaling_code;
@@ -521,7 +535,10 @@ void l2cap_channel_wait_config_state::on_exit()
 
 }
 
-void l2cap_channel_wait_config_state::handle_config_request( std::shared_ptr<l2cap_config_request> const& a_request )
+void l2cap_channel_wait_config_state::handle_config_request
+    (
+    std::shared_ptr<l2cap_config_request> const& a_request
+    )
 {
     // Stay in this state and wait for upper layer's reponse for this config request from remote device.
 
@@ -549,7 +566,10 @@ void l2cap_channel_wait_config_state::handle_config_request( std::shared_ptr<l2c
 
 }
 
-void l2cap_channel_wait_config_state::handle_signaling_packet( std::shared_ptr<signaling_channel_packet> const& a_channel_pkt )
+void l2cap_channel_wait_config_state::handle_signaling_packet
+    (
+    std::shared_ptr<signaling_channel_packet> const& a_channel_pkt
+    )
 {
     if( !a_channel_pkt )
     {
@@ -568,7 +588,10 @@ void l2cap_channel_wait_config_state::handle_signaling_packet( std::shared_ptr<s
     }
 }
 
-void l2cap_channel_wait_config_state::accept_coming_config_request( std::shared_ptr<l2cap_config_request> const& a_request )
+void l2cap_channel_wait_config_state::accept_coming_config_request
+    (
+    std::shared_ptr<l2cap_config_request> const& a_request
+    )
 {
     uint8_t continue_ = a_request->m_continue_flag ? 0x01 : 0x00;
     get_statemachine().m_signaling_channel->send_config_response
@@ -598,7 +621,10 @@ bool l2cap_channel_wait_config_req_rsp_state::handle_event( uint32_t event, void
     return true;
 }
 
-bool l2cap_channel_wait_config_req_rsp_state::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
+bool l2cap_channel_wait_config_req_rsp_state::handle_event
+    (
+    std::shared_ptr<state_machine::abstract_event> const& a_event
+    )
 {
     std::shared_ptr<l2cap_channel_event> event_;
     event_ = std::static_pointer_cast< l2cap_channel_event >( a_event );
@@ -1109,7 +1135,8 @@ void l2cap_channel_open_state::handle_signaling_packet( std::shared_ptr<signalin
         /* TODO we need handle this configuration request here */
         break;
     default:
-        LogUtilError() << "Received signaling message on open state, ignored signaling: " << a_channel_pkt->m_signaling_code;
+        LogUtilError() << "Received signaling message on open state, ignored signaling: "
+            << a_channel_pkt->m_signaling_code;
         break;
     }
 }
@@ -1215,7 +1242,8 @@ void l2cap_channel_wait_connect_rsp_state::handle_signaling_packet
         }
         break;
     default:
-        LogUtilError() << "Received signaling message on open state, ignored signaling: " << a_channel_pkt->m_signaling_code;
+        LogUtilError() << "Received signaling message on open state, ignored signaling: "
+            << a_channel_pkt->m_signaling_code;
         break;
     }
 }

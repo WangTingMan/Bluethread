@@ -481,8 +481,21 @@ public:
 
     l2cap_information_response();
     l2cap_channel_information_type m_infor_type = l2cap_channel_information_type::extended_features_supported;
-    uint16_t m_result_code;
+    uint16_t m_result_code = 0u;
     uint8_t m_information_data[10];
+};
+
+class l2cap_connection_parameter_update_request : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_connection_parameter_update_request();
+
+    uint16_t m_min_interval = 0u;
+    uint16_t m_max_interval = 0u;
+    uint16_t m_latency = 0u;
+    uint16_t m_timerout_timeout = 0u;
 };
 
 struct l2cap_config_local_channel_request

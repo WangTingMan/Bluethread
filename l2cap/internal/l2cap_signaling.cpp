@@ -453,7 +453,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_information_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_parameter_update_req:
-            handle_connection_parameter_update_request( raw_hci );
+            parsed_size = handle_connection_parameter_update_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_parameter_update_rsp:
             break;
@@ -1288,9 +1288,96 @@ uint16_t l2cap_signaling::handle_disconnect_request( uint8_t const* a_raw_sig, u
     return size_parsed;
 }
 
-void l2cap_signaling::handle_connection_parameter_update_request( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::handle_connection_parameter_update_request
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
 
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "ConnParamUpdateReq parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( m_acl_type != acl_type::le_acl )
+    {
+        LogUtilWarning() << "ConnParamUpdateReq: Not LE ACL link, reject this command";
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        size_parsed = a_size;
+        size_left = a_size;
+        return size_parsed;
+    }
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "ConnParamUpdateReq parse fail: buffer too small, cannot read data length";
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        // NOTE: This is Request, but frame truncated, cannot fetch identifier to send reject
+        return size_parsed;
+    }
+
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+
+    constexpr uint16_t PARAM_UPDATE_PAYLOAD_FIXED = 8u;
+    if( data_size != PARAM_UPDATE_PAYLOAD_FIXED || size_left < data_size )
+    {
+        LogUtilWarning() << "ConnParamUpdateReq parse fail: payload size invalid, data_size=" << data_size;
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        */
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    const uint8_t* p_payload = a_raw_sig + 4;
+    auto param_req = std::make_shared<l2cap_connection_parameter_update_request>();
+    param_req->m_min_interval = le_to_host16( p_payload );
+    param_req->m_max_interval = le_to_host16( p_payload + 2 );
+    param_req->m_latency = le_to_host16( p_payload + 4 );
+    param_req->m_timerout_timeout = le_to_host16( p_payload + 6 );
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    param_req->set_receiver( the_controller->get_address() );
+    param_req->set_sender( m_remote_address );
+
+    LogUtilInfo() << "Received ConnParamUpdateReq: min=" << param_req->m_min_interval
+        << ", max=" << param_req->m_max_interval
+        << ", latency=" << param_req->m_latency
+        << ", timeout=" << param_req->m_timerout_timeout;
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( param_req );
+    }
+    else
+    {
+        LogUtilError() << "No signaling handler for connection parameter update request";
+    }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
 }
 
 uint16_t l2cap_signaling::handle_unknown_signaling_code( uint8_t const* a_raw_sig, uint16_t a_size )

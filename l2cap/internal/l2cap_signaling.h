@@ -318,7 +318,11 @@ private:
      * Handle the incoming connection parameter update request
      * Warning: only used in LE link.
      */
-    void handle_connection_parameter_update_request( std::vector<uint8_t> const& a_raw_hci );
+    uint16_t handle_connection_parameter_update_request
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     uint16_t handle_unknown_signaling_code( uint8_t const* a_raw_sig, uint16_t a_size );
 

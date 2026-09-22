@@ -450,7 +450,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_information_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_information_rsp:
-            handle_information_response( raw_hci );
+            parsed_size = handle_information_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_parameter_update_req:
             handle_connection_parameter_update_request( raw_hci );
@@ -625,13 +625,77 @@ uint16_t l2cap_signaling::handle_information_request
     return size_parsed;
 }
 
-void l2cap_signaling::handle_information_response( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::handle_information_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
-    uint8_t identifier = a_raw_hci[s_l2cap_signaling_offset + 1];
-    uint16_t info_type_ori = le_to_host16( a_raw_hci.data() + s_l2cap_signaling_offset + 4 );
-    uint16_t result_code = le_to_host16( a_raw_hci.data() + s_l2cap_signaling_offset + 6 );
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
 
-    l2cap_channel_information_type info_type = static_cast<l2cap_channel_information_type>( info_type_ori );
+    if( m_acl_type == acl_type::le_acl )
+    {
+        LogUtilError() << "LE ACL connection: INFORMATION_RESPONSE is not supported.";
+        size_parsed = a_size;
+        size_left = 0;
+        return size_parsed;
+    }
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "InformationResponse parse fail: buffer too small,"
+            " cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "InformationResponse parse fail: buffer too small,"
+            " cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        // NOTE: INFORMATION_RESPONSE is Response, MUST NOT send Command Reject
+        return size_parsed;
+    }
+
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+
+    constexpr uint16_t INFO_BASE_PAYLOAD = 4;
+    if( data_size < INFO_BASE_PAYLOAD || size_left < data_size )
+    {
+        LogUtilWarning() << "InformationResponse parse fail: payload insufficient, data_size="
+            << data_size;
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        * NOTE: Response frame, no Command Reject reply.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    const uint8_t* p_payload = a_raw_sig + 4;
+    uint16_t info_type_ori = le_to_host16( p_payload );
+    uint16_t result_code = le_to_host16( p_payload + 2 );
+    const uint8_t* p_info_data = p_payload + INFO_BASE_PAYLOAD;
+    uint16_t info_data_len = data_size - INFO_BASE_PAYLOAD;
+    l2cap_channel_information_type info_type = static_cast<l2cap_channel_information_type>
+        ( info_type_ori );
+
     if( result_code != 0x00 )
     {
         LogUtilError() << "remote device return error code " << result_code
@@ -657,17 +721,22 @@ void l2cap_signaling::handle_information_response( std::vector<uint8_t> const& a
         switch( info_type )
         {
         case l2cap_channel_information_type::connectionless_mtu:
-            m_remote_connectionless_mtu = le_to_host16( a_raw_hci.data() + m_sig_header.header_size() + 4 );
+            if( info_data_len >= 2 )
+            {
+                m_remote_connectionless_mtu = le_to_host16( p_info_data );
+            }
             query_information( l2cap_channel_information_type::extended_features_supported );
             break;
         case l2cap_channel_information_type::extended_features_supported:
-            m_remote_ext_features.set_value( a_raw_hci.data() + m_sig_header.header_size() + 4 );
+            m_remote_ext_features.set_value( p_info_data );
             LogUtilInfo() << m_remote_ext_features.to_string();
             query_information( l2cap_channel_information_type::fixed_channel_supported );
             break;
         case l2cap_channel_information_type::fixed_channel_supported:
             break;
         default:
+            LogUtilInfo() << "InformationResponse: unknown/reserved info_type: " << info_type_ori
+                << ", info data len: " << info_data_len;
             break;
         }
     }
@@ -676,6 +745,21 @@ void l2cap_signaling::handle_information_response( std::vector<uint8_t> const& a
     {
         m_info_callback( get_acl_handle(), info_type );
     }
+
+    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
+    {
+        auto& ele = *it;
+        if( ele.m_sent_command->m_identifier == identifier )
+        {
+            cancel_timer( ele.m_registered_time_out_timer_id );
+            m_commands_sent.erase( it );
+            break;
+        }
+    }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
 }
 
 uint16_t l2cap_signaling::handle_command_reject_response

@@ -248,7 +248,11 @@ private:
     /**
      * Handle information response from remote device
      */
-    void handle_information_response( std::vector<uint8_t> const& a_raw_hci );
+    uint16_t handle_information_response
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     /**
      * Handle the coming command reject response

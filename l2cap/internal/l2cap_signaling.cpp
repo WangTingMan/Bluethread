@@ -444,7 +444,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_echo_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_echo_rsp:
-            handle_echo_response( raw_hci );
+            parsed_size = handle_echo_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_information_req:
             parsed_size = handle_information_request( raw_sig_ptr, available_size );
@@ -810,6 +810,10 @@ uint16_t l2cap_signaling::handle_command_reject_response
         reject_rsp->m_reject_data.assign( p_remain_payload, p_remain_payload + remain_payload_len );
         if( m_sig_pkt_handler )
         {
+            auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+                .get_detail_information<controller>( controller::s_information_name );
+            reject_rsp->set_receiver( the_controller->get_address() );
+            reject_rsp->set_sender( m_remote_address );
             m_sig_pkt_handler( reject_rsp );
         }
         else
@@ -1335,14 +1339,103 @@ uint16_t l2cap_signaling::handle_echo_request
     return size_parsed;
 }
 
-void l2cap_signaling::handle_echo_response(std::vector<uint8_t> const& a_raw_hci)
+uint16_t l2cap_signaling::handle_echo_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
     LogUtilInfo() << "received echo response from remote device.";
+
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
+
     if( m_acl_type == acl_type::le_acl )
     {
         LogUtilError() << "LE ACL connection response is not supported.";
-        return;
+        size_parsed = a_size;
+        size_left = 0;
+        return size_parsed;
     }
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "EchoResponse parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "EchoResponse parse fail: buffer too small, cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        // NOTE: ECHO_RESPONSE is Response, MUST NOT send Command Reject
+        return size_parsed;
+    }
+
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+
+    if( size_left < data_size )
+    {
+        LogUtilWarning() << "EchoResponse parse fail: payload buffer insufficient, data_size=" << data_size;
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        * NOTE: Response frame, no Command Reject reply.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    const uint8_t* p_echo_data = a_raw_sig + 4;
+    LogUtilInfo() << "received echo response from remote device, identifier: " << identifier
+        << ", echo data len: " << data_size;
+
+    auto echo_rsp = std::make_shared<l2cap_echo_response>();
+    echo_rsp->m_identifier = identifier;
+    echo_rsp->m_echo_data.assign( p_echo_data, p_echo_data + data_size );
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    echo_rsp->set_receiver( the_controller->get_address() );
+    echo_rsp->set_sender( m_remote_address );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( echo_rsp );
+    }
+    else
+    {
+        LogUtilError() << "No signaling handler for echo response";
+    }
+
+    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
+    {
+        auto& ele = *it;
+        if( ele.m_sent_command->m_identifier == identifier )
+        {
+            cancel_timer( ele.m_registered_time_out_timer_id );
+            m_commands_sent.erase( it );
+            break;
+        }
+    }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
 }
 
 void l2cap_signaling::send_command_reject_response

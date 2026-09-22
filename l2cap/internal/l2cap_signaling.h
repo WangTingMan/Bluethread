@@ -299,7 +299,11 @@ private:
     /**
      * Handle the coming channel echo request
      */
-    void handle_echo_response(std::vector<uint8_t> const& a_raw_hci);
+    uint16_t handle_echo_response
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     /**
      * Handle the coming channel disconnect request

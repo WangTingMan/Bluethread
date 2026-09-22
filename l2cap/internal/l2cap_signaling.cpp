@@ -924,6 +924,7 @@ uint16_t l2cap_signaling::handle_disconnect_request( uint8_t const* a_raw_sig, u
     constexpr uint16_t REQUIRED_PAYLOAD_LEN = 4;
     data_size = le_to_host16( a_raw_sig + 2 );
     size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
 
     if( data_size != REQUIRED_PAYLOAD_LEN ||
         size_left < 4 )
@@ -938,11 +939,11 @@ uint16_t l2cap_signaling::handle_disconnect_request( uint8_t const* a_raw_sig, u
         size_parsed = a_size;
         return size_parsed;
     }
-    size_parsed += 2;
 
     uint16_t destination_cid = le_to_host16( a_raw_sig + 4 );
     uint16_t source_cid = le_to_host16( a_raw_sig + 6 );
     size_parsed += 4;
+    size_left -= 4;
 
     request = std::make_shared<l2cap_disconnect_request>();
     request->m_identifier = identifier;

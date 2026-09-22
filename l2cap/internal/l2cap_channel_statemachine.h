@@ -48,7 +48,7 @@ public:
     event_type m_type = event_type::invalid;
     std::shared_ptr<signaling_channel_packet> m_channel_pkt;
     std::shared_ptr<hci_data> m_channel_data;
-    connection_req_result m_reason;
+    connection_req_result m_reason = connection_req_result::connection_refused_security;
 };
 
 class l2cap_channel_base_state : public state_machine::abstract_state

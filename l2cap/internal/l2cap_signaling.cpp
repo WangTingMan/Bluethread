@@ -405,65 +405,77 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
     handle[1] = raw_hci[1] & 0x0F;
     uint16_t handle_ = m_sig_header.get_acl_handle();
 
-    uint16_t total_size = le_to_host16( raw_hci.data() + 2 );
-    uint16_t pdu_size = le_to_host16( raw_hci.data() + 4 );
+    uint8_t const* raw_sig_ptr = raw_hci.data() + 4;
+    uint32_t available_size = raw_hci.size() - 4;
+    uint32_t parsed_size = 0;
 
-    signaling_code code = static_cast<signaling_code>( raw_hci[s_l2cap_signaling_offset] );
-    switch( code )
+    while( available_size > 0 )
     {
-    case bluetooth::signaling_code::l2cap_command_reject_rsp:
-        handle_command_reject_response( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_connection_req:
-        handle_connection_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_connection_rsp:
-        handle_connection_response( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_configuration_req:
-        handle_config_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_configuration_rsp:
-        handle_config_response( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_disconnection_req:
-        handle_disconnect_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_disconnection_rsp:
-        break;
-    case bluetooth::signaling_code::l2cap_echo_req:
-        handle_echo_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_echo_rsp:
-        handle_echo_response( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_information_req:
-        handle_information_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_information_rsp:
-        handle_information_response( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_connection_parameter_update_req:
-        handle_connection_parameter_update_request( raw_hci );
-        break;
-    case bluetooth::signaling_code::l2cap_connection_parameter_update_rsp:
-        break;
-    case bluetooth::signaling_code::l2cap_le_credit_based_connection_req:
-        break;
-    case bluetooth::signaling_code::l2cap_le_credit_based_connection_rsp:
-        break;
-    case bluetooth::signaling_code::l2cap_flow_control_credit_ind:
-        break;
-    case bluetooth::signaling_code::l2cap_credit_based_connection_req:
-        break;
-    case bluetooth::signaling_code::l2cap_credit_based_connection_rsp:
-        break;
-    case bluetooth::signaling_code::l2cap_credit_based_reconfigure_req:
-        break;
-    case bluetooth::signaling_code::l2cap_credit_based_reconfigure_rsp:
-        break;
-    default:
-        break;
+        if( available_size < 1 )
+        {
+            LogUtilError( "signaling packet two small, we need signaling code first" );
+            return;
+        }
+
+        signaling_code code = static_cast<signaling_code>( raw_sig_ptr[0] );
+        switch( code )
+        {
+        case bluetooth::signaling_code::l2cap_command_reject_rsp:
+            handle_command_reject_response( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_connection_req:
+            parsed_size = parse_connection_request( raw_sig_ptr, available_size );
+            raw_sig_ptr += parsed_size;
+            available_size -= parsed_size;
+            break;
+        case bluetooth::signaling_code::l2cap_connection_rsp:
+            handle_connection_response( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_configuration_req:
+            handle_config_request( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_configuration_rsp:
+            handle_config_response( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_disconnection_req:
+            handle_disconnect_request( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_disconnection_rsp:
+            break;
+        case bluetooth::signaling_code::l2cap_echo_req:
+            handle_echo_request( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_echo_rsp:
+            handle_echo_response( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_information_req:
+            handle_information_request( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_information_rsp:
+            handle_information_response( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_connection_parameter_update_req:
+            handle_connection_parameter_update_request( raw_hci );
+            break;
+        case bluetooth::signaling_code::l2cap_connection_parameter_update_rsp:
+            break;
+        case bluetooth::signaling_code::l2cap_le_credit_based_connection_req:
+            break;
+        case bluetooth::signaling_code::l2cap_le_credit_based_connection_rsp:
+            break;
+        case bluetooth::signaling_code::l2cap_flow_control_credit_ind:
+            break;
+        case bluetooth::signaling_code::l2cap_credit_based_connection_req:
+            break;
+        case bluetooth::signaling_code::l2cap_credit_based_connection_rsp:
+            break;
+        case bluetooth::signaling_code::l2cap_credit_based_reconfigure_req:
+            break;
+        case bluetooth::signaling_code::l2cap_credit_based_reconfigure_rsp:
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -641,14 +653,72 @@ void l2cap_signaling::handle_command_reject_response(std::vector<uint8_t> const&
     }
 }
 
-void l2cap_signaling::handle_connection_request( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::parse_connection_request
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
     std::shared_ptr<connection_request> request;
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "ConnectionRequest parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "ConnectionRequest parse fail: buffer too small, cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    /* L2CAP CONNECTION_REQ payload : PSM(2) + Source CID(2), fixed 4 octets payload */
+    constexpr uint16_t REQUIRED_PAYLOAD_LEN = 4;
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 bytes data length field.*/
+    if( data_size != REQUIRED_PAYLOAD_LEN ||
+        size_left < 4 )
+    {
+        LogUtilWarning() << "ConnectionRequest parse fail: invalid length not 4";
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    size_parsed += 2;
+
+    uint16_t psm = le_to_host16( a_raw_sig + 4 );
+    uint16_t source_cid = le_to_host16( a_raw_sig + 6 );
+    size_parsed += 4;
+
     request = std::make_shared<connection_request>();
-    request->m_identifier = a_raw_hci[m_sig_header.l2cap_header::header_size() + 1];
+    request->m_identifier = identifier;
     request->m_acl_handle = m_sig_header.get_acl_handle();
-    request->m_psm_value = le_to_host16( a_raw_hci.data() + m_sig_header.header_size() );
-    request->m_source_cid = le_to_host16( a_raw_hci.data() + m_sig_header.header_size() + 2 );
+    request->m_psm_value = psm;
+    request->m_source_cid = source_cid;
 
     auto the_controller = framework::framework_manager::get_instance().get_info_manager()
         .get_detail_information<controller>( controller::s_information_name );
@@ -663,6 +733,8 @@ void l2cap_signaling::handle_connection_request( std::vector<uint8_t> const& a_r
     {
         LogUtilError() << "No signaling request handler!";
     }
+
+    return size_parsed;
 }
 
 void l2cap_signaling::handle_connection_response( std::vector<uint8_t> const& a_raw_hci )

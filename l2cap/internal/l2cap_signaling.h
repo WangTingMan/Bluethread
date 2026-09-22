@@ -239,7 +239,11 @@ private:
     /**
      * Handle information request from remote device
      */
-    void handle_information_request( std::vector<uint8_t> const& a_raw_hci );
+    uint16_t handle_information_request
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     /**
      * Handle information response from remote device

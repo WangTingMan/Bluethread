@@ -447,7 +447,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             handle_echo_response( raw_hci );
             break;
         case bluetooth::signaling_code::l2cap_information_req:
-            handle_information_request( raw_hci );
+            parsed_size = handle_information_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_information_rsp:
             handle_information_response( raw_hci );
@@ -511,13 +511,62 @@ bool l2cap_signaling::signaling_length_valid( std::shared_ptr<hci_data> const& h
     return true;
 }
 
-void l2cap_signaling::handle_information_request( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::handle_information_request
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
-    uint8_t identifier = a_raw_hci[s_l2cap_signaling_offset + 1];
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "InformationRequest parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
 
-    uint16_t info_type = le_to_host16( a_raw_hci.data() + s_l2cap_signaling_offset + 4 );
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "InformationRequest parse fail: buffer too small, cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    constexpr uint16_t REQUIRED_PAYLOAD_LEN = 2;
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+    if( data_size != REQUIRED_PAYLOAD_LEN ||
+        size_left < REQUIRED_PAYLOAD_LEN )
+    {
+        LogUtilWarning() << "InformationRequest parse fail: invalid length not 2";
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint16_t info_type = le_to_host16( a_raw_sig + 4 );
+    size_parsed += REQUIRED_PAYLOAD_LEN;
+    size_left -= REQUIRED_PAYLOAD_LEN;
+
     uint16_t result_code = 0x0000;
-
     uint8_t write_buffer[100];
     uint16_t buffer_size = 0;
     stream_writer writer;
@@ -568,6 +617,12 @@ void l2cap_signaling::handle_information_request( std::vector<uint8_t> const& a_
     {
         send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
     }
+    else
+    {
+        LogUtilError( "should not reach here!" );
+    }
+
+    return size_parsed;
 }
 
 void l2cap_signaling::handle_information_response( std::vector<uint8_t> const& a_raw_hci )

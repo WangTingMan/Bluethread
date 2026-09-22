@@ -62,7 +62,7 @@ enum class signaling_code : uint8_t
 enum class command_reject_reason_code : uint16_t
 {
     command_not_understood = 0x0000,
-    signaling_mtu_excceeded = 0x0001,
+    signaling_mtu_exceeded = 0x0001,
     invalid_cid_in_request = 0x0002
 };
 

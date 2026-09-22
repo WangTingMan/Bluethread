@@ -253,7 +253,11 @@ private:
     /**
      * Handle the coming command reject response
      */
-    void handle_command_reject_response(std::vector<uint8_t> const& a_raw_hci);
+    uint16_t handle_command_reject_response
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     /**
      * Handle the coming channel connection request

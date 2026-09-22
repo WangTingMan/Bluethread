@@ -421,7 +421,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
         switch( code )
         {
         case bluetooth::signaling_code::l2cap_command_reject_rsp:
-            handle_command_reject_response( raw_hci );
+            parsed_size = handle_command_reject_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_req:
             parsed_size = handle_connection_request( raw_sig_ptr, available_size );
@@ -678,30 +678,119 @@ void l2cap_signaling::handle_information_response( std::vector<uint8_t> const& a
     }
 }
 
-void l2cap_signaling::handle_command_reject_response(std::vector<uint8_t> const& a_raw_hci)
+uint16_t l2cap_signaling::handle_command_reject_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
-    uint8_t const* p_signaling = a_raw_hci.data() + m_sig_header.l2cap_header::header_size();
-    uint8_t identifier = p_signaling[1];
-    uint16_t length = le_to_host16(p_signaling + 2);
-    uint16_t reason = le_to_host16(p_signaling + 4);
-    command_reject_reason_code reason_code = static_cast<command_reject_reason_code>(reason);
-    switch (reason_code)
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "CommandReject parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "CommandReject parse fail: buffer too small, cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        // NOTE: COMMAND_REJECT is Response, MUST NOT send Command Reject
+        return size_parsed;
+    }
+
+    constexpr uint16_t BASE_PAYLOAD_LEN = 2;
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+
+    if( data_size < BASE_PAYLOAD_LEN || size_left < data_size )
+    {
+        LogUtilWarning() << "CommandReject parse fail: payload too small, min is 2 bytes";
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        * NOTE: Response frame, no Command Reject reply.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint16_t reason = le_to_host16( a_raw_sig + 4 );
+    command_reject_reason_code reason_code = static_cast<command_reject_reason_code>( reason );
+    uint16_t remain_payload_len = data_size - BASE_PAYLOAD_LEN;
+    const uint8_t* p_remain_payload = a_raw_sig + 6;
+
+    bool payload_valid = true;
+    switch( reason_code )
     {
     case command_reject_reason_code::command_not_understood:
-        LogUtilInfo() << "Remote device cannot understood command identified by " << identifier;
-        break;
-    case command_reject_reason_code::signaling_mtu_excceeded:
+        if( remain_payload_len != 0 )
         {
-            uint16_t remote_signaling_mtu = le_to_host16(p_signaling + 6);
+            LogUtilWarning() << "CommandReject: command_not_understood has extra payload, len="
+                << remain_payload_len;
+            payload_valid = false;
+        }
+        break;
+    case command_reject_reason_code::signaling_mtu_exceeded:
+        if( remain_payload_len != 2 )
+        {
+            LogUtilWarning() << "CommandReject: signaling_mtu_exceeded expect remain payload=2";
+            payload_valid = false;
+        }
+        break;
+    case command_reject_reason_code::invalid_cid_in_request:
+        if( remain_payload_len != 4 )
+        {
+            LogUtilWarning() << "CommandReject: invalid_cid_in_request expect remain payload=4";
+            payload_valid = false;
+        }
+        break;
+    default:
+        LogUtilInfo() << "CommandReject: unknown/reserved reason code: " << reason
+            << ", remain payload length: " << remain_payload_len;
+        payload_valid = true;
+        break;
+    }
+
+    if( !payload_valid )
+    {
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    switch( reason_code )
+    {
+    case command_reject_reason_code::command_not_understood:
+        LogUtilInfo() << "Remote device cannot understand command identified by " << identifier;
+        break;
+    case command_reject_reason_code::signaling_mtu_exceeded:
+        {
+            uint16_t remote_signaling_mtu = le_to_host16( p_remain_payload );
             LogUtilInfo() << "Remote device's signaling channel's mtu is " << remote_signaling_mtu;
             m_remote_signaling_mtu = remote_signaling_mtu;
-            // TODO: send command with property size to remote device again.
+            // TODO: send command with proper size to remote device again.
         }
         break;
     case command_reject_reason_code::invalid_cid_in_request:
         {
-            uint16_t local_cid = le_to_host16(p_signaling + 6);
-            uint16_t remote_cid = le_to_host16(p_signaling + 8);
+            uint16_t local_cid = le_to_host16( p_remain_payload );
+            uint16_t remote_cid = le_to_host16( p_remain_payload + 2 );
             LogUtilInfo() << "invalid cid in request. local: " << local_cid << ", remote: " << remote_cid;
             auto tsk = std::make_shared<l2cap_task_remote_invalid_cid_channel_close>();
             tsk->m_acl_handle = get_acl_handle();
@@ -709,13 +798,41 @@ void l2cap_signaling::handle_command_reject_response(std::vector<uint8_t> const&
             tsk->m_remote_cid = remote_cid;
             tsk->m_acl_type = m_acl_type;
 
-            framework::framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+            framework::framework_manager::get_instance().get_thread_manager().post_task
+                ( tsk, framework::source_here );
         }
         break;
     default:
         LogUtilError() << "Currently we do not support such reason code: " << reason;
-        return;
+        auto reject_rsp = std::make_shared<command_reject>();
+        reject_rsp->m_identifier = identifier;
+        reject_rsp->m_reject_reason = static_cast<l2cap_command_reject_reason>( reason );
+        reject_rsp->m_reject_data.assign( p_remain_payload, p_remain_payload + remain_payload_len );
+        if( m_sig_pkt_handler )
+        {
+            m_sig_pkt_handler( reject_rsp );
+        }
+        else
+        {
+            LogUtilError() << "No signaling handler for unknown command reject reason";
+        }
+        break;
     }
+
+    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
+    {
+        auto& ele = *it;
+        if( ele.m_sent_command->m_identifier == identifier )
+        {
+            cancel_timer( ele.m_registered_time_out_timer_id );
+            m_commands_sent.erase( it );
+            break;
+        }
+    }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
 }
 
 uint16_t l2cap_signaling::handle_connection_request

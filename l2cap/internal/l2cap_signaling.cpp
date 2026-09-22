@@ -405,8 +405,8 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
     handle[1] = raw_hci[1] & 0x0F;
     uint16_t handle_ = m_sig_header.get_acl_handle();
 
-    uint8_t const* raw_sig_ptr = raw_hci.data() + 4;
-    uint32_t available_size = raw_hci.size() - 4;
+    uint8_t const* raw_sig_ptr = raw_hci.data() + s_l2cap_signaling_offset;
+    uint32_t available_size = raw_hci.size() - s_l2cap_signaling_offset;
     uint32_t parsed_size = 0;
 
     while( available_size > 0 )

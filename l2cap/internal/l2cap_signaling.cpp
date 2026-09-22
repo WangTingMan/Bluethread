@@ -427,7 +427,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_connection_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_rsp:
-            handle_connection_response( raw_hci );
+            parsed_size = handle_connection_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_configuration_req:
             handle_config_request( raw_hci );
@@ -802,28 +802,77 @@ uint16_t l2cap_signaling::handle_connection_request
     return size_parsed;
 }
 
-void l2cap_signaling::handle_connection_response( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::handle_connection_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
     if( m_acl_type == acl_type::le_acl )
     {
         LogUtilError() << "LE ACL connection response is not supported.";
-        return;
+        size_parsed = a_size;
+        size_left = 0;
+        return size_parsed;
     }
 
-    uint8_t const* p_signaling = a_raw_hci.data() + m_sig_header.l2cap_header::header_size();
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2 )
+    {
+        LogUtilWarning() << "ConnectionResponse parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
 
-    uint8_t identifier = p_signaling[1];
-    uint16_t dest_cid = le_to_host16( p_signaling + 4 );
-    uint16_t src_cid = le_to_host16( p_signaling + 6 );
-    uint16_t signal_data_length = le_to_host16( p_signaling + 2 );
-    connection_req_result result = static_cast< connection_req_result >( le_to_host16( p_signaling + 8 ) );
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
+    size_parsed += 2;
+
+    if( size_left < 2 )
+    {
+        /* we need parse the length */
+        LogUtilWarning() << "ConnectionResponse parse fail: buffer too small, cannot read data length";
+        /*Cannot get data_size, unknown command boundary. Discard all remaining buffer.*/
+        size_parsed = a_size;
+        // NOTE: CONNECTION_RSP is Response, MUST NOT send Command Reject
+        return size_parsed;
+    }
+
+    constexpr uint16_t MIN_PAYLOAD_LEN = 8;
+    data_size = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2; /* Consumed 2 octets for Length field.*/
+    size_parsed += 2;
+
+    if( data_size < MIN_PAYLOAD_LEN || size_left < data_size )
+    {
+        LogUtilWarning() << "ConnectionResponse parse fail: payload too small, min is 8 bytes";
+        /*
+        * Remote filled incorrect data_size value, cannot trust this length field.
+        * Command boundary is unreliable, cannot safely skip to next command.
+        * Consume all remaining buffer and stop further parsing in this PDU.
+        * NOTE: Response frame, no Command Reject reply.
+        */
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t src_cid = le_to_host16( a_raw_sig + 6 );
+    connection_req_result result = static_cast<connection_req_result>( le_to_host16( a_raw_sig + 8 ) );
     connection_req_refused_status status = connection_req_refused_status::refused_no_more_info;
 
     if( result == connection_req_result::connection_pending )
     {
-        if( signal_data_length >= 8 )
+        if( data_size >= 10 )
         {
-            status = static_cast<connection_req_refused_status>( le_to_host16( p_signaling + 10 ) );
+            status = static_cast<connection_req_refused_status>( le_to_host16( a_raw_sig + 10 ) );
         }
         else
         {
@@ -854,7 +903,18 @@ void l2cap_signaling::handle_connection_response( std::vector<uint8_t> const& a_
         }
     }
 
-    m_sig_pkt_handler( rsp );
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( rsp );
+    }
+    else
+    {
+        LogUtilError() << "No signaling response handler!";
+    }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
 }
 
 void l2cap_signaling::handle_config_request( std::vector<uint8_t> const& a_raw_hci )

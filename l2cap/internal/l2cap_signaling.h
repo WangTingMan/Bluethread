@@ -267,7 +267,11 @@ private:
     /**
      * Handle the coming channel connection response
      */
-    void handle_connection_response( std::vector<uint8_t> const& a_raw_hci );
+    uint16_t handle_connection_response
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
 
     /**
      * Handle the coming channel configuration request

@@ -512,6 +512,39 @@ bool l2cap_signaling::signaling_length_valid( std::shared_ptr<hci_data> const& h
     return true;
 }
 
+bool l2cap_signaling::parse_signaling_header
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t& a_size_left,
+    uint16_t& a_size_parsed,
+    uint8_t& a_identifier,
+    uint16_t& a_signal_data_length
+    )
+{
+    a_identifier = 0;
+    a_signal_data_length = 0;
+
+    if( a_size_left < 2u )
+    {
+        LogUtilWarning() << "SignalingHeader parse fail: buffer too small, cannot read Identifier";
+        return false;
+    }
+    a_identifier = a_raw_sig[1];
+    a_size_left -= 2u;
+    a_size_parsed += 2u;
+
+    if( a_size_left < 2u )
+    {
+        LogUtilWarning() << "SignalingHeader parse fail: buffer too small for signal data length";
+        return false;
+    }
+    a_signal_data_length = le_to_host16( a_raw_sig + 2 );
+    a_size_left -= 2u;
+    a_size_parsed += 2u;
+
+    return true;
+}
+
 uint16_t l2cap_signaling::handle_information_request
     (
     uint8_t const* a_raw_sig,
@@ -1619,6 +1652,22 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_request
     {
         LogUtilError() << "No signaling handler for connection parameter update request";
     }
+
+    size_parsed += data_size;
+    size_left -= data_size;
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_connection_parameter_update_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t data_size = 0u;
+
 
     size_parsed += data_size;
     size_left -= data_size;

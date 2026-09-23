@@ -237,6 +237,25 @@ private:
     bool signaling_length_valid( std::shared_ptr<hci_data> const& hci_data );
 
     /**
+     * @brief Parse L2CAP signaling header: Code(1)+Identifier(1)+Length(2)
+     * @param a_raw_sig         start pointer of signaling packet
+     * @param[in,out] size_left remaining bytes of input buffer
+     * @param[in,out] size_parsed total parsed bytes accumulator
+     * @param[out] identifier   signaling identifier, set to 0 on read failure
+     * @param[out] signal_data_length signaling payload length, set to 0 on read failure
+     * @return true: header parse ok; false: buffer insufficient
+     * @note If return false, check identifier: non-zero means identifier has been successfully read, can use it to send reject response.
+     */
+    bool parse_signaling_header
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t& size_left,
+        uint16_t& size_parsed,
+        uint8_t& identifier,
+        uint16_t& signal_data_length
+        );
+
+    /**
      * Handle information request from remote device
      */
     uint16_t handle_information_request
@@ -332,6 +351,16 @@ private:
      * Warning: only used in LE link.
      */
     uint16_t handle_connection_parameter_update_request
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
+
+    /**
+     * Handle the incoming connection parameter update request
+     * Warning: only used in LE link.
+     */
+    uint16_t handle_connection_parameter_update_response
         (
         uint8_t const* a_raw_sig,
         uint16_t a_size

@@ -163,6 +163,13 @@ enum class l2cap_channel_close_reason : uint8_t
     page_timeout = 0x01, // Locak try to make acl connection but page timeout
 };
 
+enum class conn_param_update_result : uint8_t
+{
+    invalid_result = 0xFF,
+    accepted = 0x00,
+    rejected = 0x01,
+};
+
 struct channel_qos_config
 {
     qos_type m_qos_type; // for QoS option
@@ -496,6 +503,16 @@ public:
     uint16_t m_max_interval = 0u;
     uint16_t m_latency = 0u;
     uint16_t m_timerout_timeout = 0u;
+};
+
+class l2cap_connection_parameter_update_response : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_connection_parameter_update_response();
+
+    conn_param_update_result m_result = conn_param_update_result::invalid_result;
 };
 
 struct l2cap_config_local_channel_request

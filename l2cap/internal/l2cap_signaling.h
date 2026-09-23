@@ -255,6 +255,8 @@ private:
         uint16_t& signal_data_length
         );
 
+    bool cancel_timer_for_command( uint8_t a_identifier );
+
     /**
      * Handle information request from remote device
      */

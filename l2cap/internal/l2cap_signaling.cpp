@@ -457,6 +457,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_connection_parameter_update_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_connection_parameter_update_rsp:
+            parsed_size = handle_connection_parameter_update_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_le_credit_based_connection_req:
             break;
@@ -543,6 +544,23 @@ bool l2cap_signaling::parse_signaling_header
     a_size_parsed += 2u;
 
     return true;
+}
+
+bool l2cap_signaling::cancel_timer_for_command( uint8_t a_identifier )
+{
+    bool found_pending_cmd = false;
+    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
+    {
+        auto& ele = *it;
+        if( ele.m_sent_command->m_identifier == a_identifier )
+        {
+            cancel_timer( ele.m_registered_time_out_timer_id );
+            m_commands_sent.erase( it );
+            found_pending_cmd = true;
+            break;
+        }
+    }
+    return found_pending_cmd;
 }
 
 uint16_t l2cap_signaling::handle_information_request
@@ -1666,11 +1684,64 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_response
 {
     uint16_t size_parsed = 0u;
     uint16_t size_left = a_size;
-    uint16_t data_size = 0u;
+    uint8_t identifier = 0;
+    uint16_t signal_data_length = 0u;
 
+    if( m_acl_type != acl_type::le_acl )
+    {
+        LogUtilError() << "ConnectionParameterUpdateResponse only support LE ACL connection.";
+        size_parsed = a_size;
+        return size_parsed;
+    }
 
-    size_parsed += data_size;
-    size_left -= data_size;
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_length ) )
+    {
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( signal_data_length < 2u )
+    {
+        LogUtilWarning() << "ConnParamUpdateRsp parse fail: signal data length too small, minimum require 2 bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( size_left < 2u )
+    {
+        LogUtilWarning() << "ConnParamUpdateRsp parse fail: buffer too small for result field";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint16_t result_code = le_to_host16( a_raw_sig + 4 );
+    size_left -= 2u;
+    size_parsed += 2u;
+
+    bool canceled = cancel_timer_for_command( identifier );
+    if( !canceled )
+    {
+        LogUtilWarning() << "ConnParamUpdateRsp: no pending sent command found, identifier=" << identifier;
+    }
+
+    auto rsp = std::make_shared<l2cap_connection_parameter_update_response>();
+    rsp->m_identifier = identifier;
+    rsp->m_result = static_cast<conn_param_update_result>( result_code );
+    rsp->set_sender( m_remote_address );
+
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    rsp->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( rsp );
+    }
+    else
+    {
+        LogUtilError() << "No signaling response handler!";
+    }
+
     return size_parsed;
 }
 

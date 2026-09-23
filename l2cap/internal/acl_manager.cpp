@@ -332,8 +332,6 @@ void acl_manager::handle_acl_completed_changed( std::vector<std::pair<uint16_t, 
     if( completed_count > 0 )
     {
         m_br_edr_acl_credit += completed_count;
-        LogUtilInfo() << "completed count = " << completed_count
-            << " current credit = " << m_br_edr_acl_credit;
         send_next_outgoing_packet();
     }
 }
@@ -636,7 +634,6 @@ void acl_manager::send_next_outgoing_packet()
         framework::framework_manager::get_instance().get_thread_manager()
             .post_task( hci_task, framework::source_here );
         m_br_edr_acl_credit--;
-        LogUtilInfo() << "Send outgoing packet, remaining credit = " << m_br_edr_acl_credit;
     }
 }
 

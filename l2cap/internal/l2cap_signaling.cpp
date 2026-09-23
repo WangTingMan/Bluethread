@@ -460,11 +460,13 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_connection_parameter_update_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_le_credit_based_connection_req:
-            parsed_size = handle_le_credit_based_connection_req( raw_sig_ptr, available_size );
+            parsed_size = handle_le_credit_based_connection_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_le_credit_based_connection_rsp:
+            parsed_size = handle_le_credit_based_connection_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_flow_control_credit_ind:
+            parsed_size = handle_le_flow_control_credit_ind( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_connection_req:
             break;
@@ -1746,7 +1748,7 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_response
     return size_parsed;
 }
 
-uint16_t l2cap_signaling::handle_le_credit_based_connection_req
+uint16_t l2cap_signaling::handle_le_credit_based_connection_request
     (
     uint8_t const* a_raw_sig,
     uint16_t a_size
@@ -1819,6 +1821,147 @@ uint16_t l2cap_signaling::handle_le_credit_based_connection_req
     else
     {
         LogUtilError() << "No signaling request handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_le_credit_based_connection_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_length = 0u;
+
+    if( m_acl_type != acl_type::le_acl )
+    {
+        LogUtilError() << "LeCreditBasedConnectionRsp only support LE ACL connection.";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_length ) )
+    {
+        size_parsed = a_size;
+        // Response packet: parse fail, do NOT send command reject
+        return size_parsed;
+    }
+
+    // DestCID(2) + MTU(2) + MPS(2) + InitialCredits(2) + Result(2) = 10 bytes
+    if( signal_data_length < 10u )
+    {
+        LogUtilWarning() << "LeCreditBasedConnectionRsp parse fail: signal data length too small,"
+            " minimum require 10 bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( size_left < 10u )
+    {
+        LogUtilWarning() << "LeCreditBasedConnectionRsp parse fail: buffer too small for response payload";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t mtu = le_to_host16( a_raw_sig + 6 );
+    uint16_t mps = le_to_host16( a_raw_sig + 8 );
+    uint16_t init_credits = le_to_host16( a_raw_sig + 10 );
+    uint16_t result_code = le_to_host16( a_raw_sig + 12 );
+
+    size_left -= 10u;
+    size_parsed += 10u;
+
+    bool canceled = cancel_timer_for_command( identifier );
+    if( !canceled )
+    {
+        LogUtilWarning() << "LeCreditBasedConnectionRsp: no pending sent command found, identifier=" << identifier;
+    }
+
+    auto rsp = std::make_shared<l2cap_le_credit_based_connection_response>();
+    rsp->m_identifier = identifier;
+    rsp->m_mtu = mtu;
+    rsp->m_mps = mps;
+    rsp->m_initial_credits = init_credits;
+    rsp->m_result = static_cast<le_credit_conn_result>( result_code );
+    rsp->set_sender( m_remote_address );
+
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    rsp->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( rsp );
+    }
+    else
+    {
+        LogUtilError() << "No signaling response handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_le_flow_control_credit_ind
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_length = 0u;
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_length ) )
+    {
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    // DestCID(2) + AdditionalCredits(2) = 4 bytes
+    if( signal_data_length < 4u )
+    {
+        LogUtilWarning() << "LeFlowControlCreditInd parse fail: signal data length too small,"
+            " minimum require 4 bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( size_left < 4u )
+    {
+        LogUtilWarning() << "LeFlowControlCreditInd parse fail: buffer too small for payload";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t add_credits = le_to_host16( a_raw_sig + 6 );
+    size_left -= 4u;
+    size_parsed += 4u;
+
+    auto ind = std::make_shared<l2cap_le_flow_control_credit_indication>();
+    ind->m_identifier = identifier;
+    ind->m_remote_cid = dest_cid;
+    ind->m_additional_credits = add_credits;
+    ind->set_sender( m_remote_address );
+
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    ind->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( ind );
+    }
+    else
+    {
+        LogUtilError() << "No signaling indication handler!";
     }
 
     return size_parsed;

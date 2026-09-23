@@ -170,6 +170,24 @@ enum class conn_param_update_result : uint8_t
     rejected = 0x01,
 };
 
+/**
+ * @brief Result code for L2CAP LE Credit Based Connection Response
+ * @see Bluetooth Core Specification, L2CAP LE Credit Based Connection Result
+ */
+enum class le_credit_conn_result : uint16_t
+{
+    connection_successful = 0x0000, ///< Connection successful
+    connection_refused_spsm_not_supported = 0x0002, ///< Connection refused - SPSM not supported
+    connection_refused_no_resources = 0x0004, ///< Connection refused - no resources available
+    connection_refused_insufficient_authentication = 0x0005, ///< Connection refused - insufficient authentication
+    connection_refused_insufficient_authorization = 0x0006, ///< Connection refused - insufficient authorization
+    connection_refused_encryption_key_size_too_short = 0x0007, ///< Connection refused - encryption key size too short
+    connection_refused_insufficient_encryption = 0x0008, ///< Connection refused - insufficient encryption
+    connection_refused_invalid_source_cid = 0x0009, ///< Connection refused - invalid Source CID
+    connection_refused_source_cid_already_allocated = 0x000A, ///< Connection refused - Source CID already allocated
+    connection_refused_unacceptable_parameters = 0x000B ///< Connection refused - unacceptable parameters
+};
+
 struct channel_qos_config
 {
     qos_type m_qos_type; // for QoS option
@@ -526,6 +544,30 @@ public:
     uint16_t m_mtu;
     uint16_t m_mps;
     uint16_t m_initial_credits;
+};
+
+class l2cap_le_credit_based_connection_response : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_le_credit_based_connection_response();
+
+    uint16_t m_mtu;
+    uint16_t m_mps;
+    uint16_t m_initial_credits;
+    le_credit_conn_result m_result;
+};
+
+class l2cap_le_flow_control_credit_indication : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_le_flow_control_credit_indication();
+
+    uint16_t m_remote_cid;
+    uint16_t m_additional_credits;
 };
 
 struct l2cap_config_local_channel_request

@@ -439,6 +439,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_disconnect_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_disconnection_rsp:
+            parsed_size = handle_disconnect_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_echo_req:
             parsed_size = handle_echo_request( raw_sig_ptr, available_size );
@@ -1428,6 +1429,105 @@ uint16_t l2cap_signaling::handle_disconnect_request( uint8_t const* a_raw_sig, u
     else
     {
         LogUtilError() << "No signaling request handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_disconnect_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t signal_data_length = 0u;
+
+    if( m_acl_type == acl_type::le_acl )
+    {
+        LogUtilError() << "LE ACL disconnect response is not supported.";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2u )
+    {
+        LogUtilWarning() << "DisconnectResponse parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2u;
+    size_parsed += 2u;
+
+    if( size_left < 2u )
+    {
+        LogUtilWarning() << "DisconnectResponse parse fail: buffer too small for signal data length";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    signal_data_length = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2u;
+    size_parsed += 2u;
+
+    // DISCONNECT_RSP payload: Source CID(2) + Dest CID(2), min 4 bytes
+    if( signal_data_length < 4u )
+    {
+        LogUtilWarning() << "DisconnectResponse parse fail: signal data length too small, minimum require 4 bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( size_left < 4u )
+    {
+        LogUtilWarning() << "DisconnectResponse parse fail: buffer too small for source CID + dest CID";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    uint16_t source_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 6 );
+    size_left -= 4u;
+    size_parsed += 4u;
+
+    bool found_pending_cmd = false;
+    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
+    {
+        auto& ele = *it;
+        if( ele.m_sent_command->m_identifier == identifier )
+        {
+            cancel_timer( ele.m_registered_time_out_timer_id );
+            m_commands_sent.erase( it );
+            found_pending_cmd = true;
+            break;
+        }
+    }
+    if( !found_pending_cmd )
+    {
+        LogUtilWarning() << "DisconnectResponse: no pending sent command found, identifier=" << identifier;
+    }
+
+    auto request = std::make_shared<l2cap_disconnect_response>();
+    request->m_identifier = identifier;
+    request->m_source_cid = source_cid;
+    request->m_destination_cid = dest_cid;
+    request->set_sender( m_remote_address );
+
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    request->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( request );
+    }
+    else
+    {
+        LogUtilError() << "No signaling response handler!";
     }
 
     return size_parsed;

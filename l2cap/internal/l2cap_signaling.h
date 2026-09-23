@@ -309,7 +309,7 @@ private:
         );
 
     /**
-     * Handle the coming channel echo request
+     * Handle the coming channel echo response
      */
     uint16_t handle_echo_response
         (
@@ -321,6 +321,11 @@ private:
      * Handle the coming channel disconnect request
      */
     uint16_t handle_disconnect_request( uint8_t const* a_raw_sig, uint16_t a_size );
+
+    /**
+     * Handle the coming channel disconnect response
+     */
+    uint16_t handle_disconnect_response( uint8_t const* a_raw_sig, uint16_t a_size );
 
     /**
      * Handle the incoming connection parameter update request

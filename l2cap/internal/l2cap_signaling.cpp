@@ -430,7 +430,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_connection_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_configuration_req:
-            handle_config_request( raw_hci );
+            parsed_size = handle_config_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_configuration_rsp:
             handle_config_response( raw_hci );
@@ -1122,47 +1122,101 @@ uint16_t l2cap_signaling::handle_connection_response
     return size_parsed;
 }
 
-void l2cap_signaling::handle_config_request( std::vector<uint8_t> const& a_raw_hci )
+uint16_t l2cap_signaling::handle_config_request
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
 {
-    uint8_t const* p_signaling = a_raw_hci.data() + m_sig_header.l2cap_header::header_size();
-    uint8_t ientifier = p_signaling[1];
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint16_t signal_data_length = 0u;
+
+    /*
+     * At least 2 octets required to read Code and Identifier from signaling header.
+     * Buffer may contain subsequent signaling commands after current command.
+     */
+    if( size_left < 2u )
+    {
+        LogUtilWarning() << "ConfigRequest parse fail: buffer too small, cannot read Identifier";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    uint8_t identifier = a_raw_sig[1];
+    size_left -= 2u;
+    size_parsed += 2u;
 
     if( m_acl_type == acl_type::le_acl )
     {
-        LogUtilError() << "LE ACL connection response is not supported.";
-        send_reject_rsp( ientifier,
+        LogUtilError() << "LE ACL config request is not supported.";
+        send_reject_rsp( identifier,
             l2cap_command_reject_reason::unknown_command, nullptr, 0 );
-        return;
+        size_parsed = a_size;
+        return size_parsed;
     }
 
-    uint16_t signal_data_length = le_to_host16( p_signaling + 2 );
-    uint16_t dest_cid = le_to_host16( p_signaling + 4 );
-    uint16_t flags = le_to_host16( p_signaling + 6 );
-    uint16_t acl_handle = get_acl_handle();
+    if( size_left < 2u )
+    {
+        LogUtilWarning() << "ConfigRequest parse fail: buffer too small for signal data length";
+        size_parsed = a_size;
+        send_reject_rsp( identifier,
+            l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+    signal_data_length = le_to_host16( a_raw_sig + 2 );
+    size_left -= 2u;
+    size_parsed += 2u;
 
+    if( signal_data_length < 4 )
+    {
+        LogUtilWarning() << "ConfigRequest parse fail: signal data length too small, minimum require 4 bytes";
+        size_parsed = a_size;
+        send_reject_rsp( identifier,
+            l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t flags = le_to_host16( a_raw_sig + 6 );
     bool continue_flag = 0x01 == ( flags & 0x01 );
+    size_left -= 4u;
+    size_parsed += 4u;
+
     bool remote_edr_ext_flow_support = m_remote_ext_features.support_feature(
         l2cap_ext_feature_flag::extended_flow_specification_edr );
-    if( continue_flag && remote_edr_ext_flow_support && get_acl_type() == acl_type::br_edr_acl )
+    if( continue_flag && remote_edr_ext_flow_support )
     {
         LogUtilError() << "Remote device should not use continue flag when support ext-flow";
     }
 
-    uint8_t const* p_config = a_raw_hci.data() + m_sig_header.header_size() + 4;
-    auto [options, unknown_types, is_truncated] = parse_channel_config( p_config, signal_data_length - 4 );
+    uint16_t config_option_len = signal_data_length - 4u;
+    if( size_left < config_option_len )
+    {
+        LogUtilWarning() << "ConfigRequest parse fail: buffer too small for config options";
+        size_parsed = a_size;
+        send_reject_rsp( identifier,
+            l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    uint8_t const* p_config = a_raw_sig + 8u;
+    auto [options, unknown_types, is_truncated] = parse_channel_config( p_config, config_option_len );
+    size_left -= config_option_len;
+    size_parsed += config_option_len;
 
     if( is_truncated )
     {
-        LogUtilError() << "Remote device send an invalid configuration packet";
+        LogUtilError() << "ConfigRequest: remote send truncated configuration options";
     }
 
     std::shared_ptr<l2cap_config_request> request;
     request = std::make_shared<l2cap_config_request>();
     request->m_destionation_cid = dest_cid;
-    request->m_identifier = ientifier;
+    request->m_identifier = identifier;
     request->m_options.swap( options );
     request->m_unkown_option_types.swap( unknown_types );
-    request->m_acl_handle = acl_handle;
+    request->m_acl_handle = get_acl_handle();
     request->m_continue_flag = continue_flag;
     request->set_sender( m_remote_address );
     request->m_is_truncted = is_truncated;
@@ -1171,7 +1225,16 @@ void l2cap_signaling::handle_config_request( std::vector<uint8_t> const& a_raw_h
         .get_detail_information<controller>( controller::s_information_name );
     request->set_receiver( the_controller->get_address() );
 
-    m_sig_pkt_handler( request );
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( request );
+    }
+    else
+    {
+        LogUtilError() << "No signaling request handler!";
+    }
+
+    return size_parsed;
 }
 
 void l2cap_signaling::handle_config_response( std::vector<uint8_t> const& a_raw_hci )

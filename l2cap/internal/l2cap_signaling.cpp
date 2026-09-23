@@ -460,6 +460,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_connection_parameter_update_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_le_credit_based_connection_req:
+            parsed_size = handle_le_credit_based_connection_req( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_le_credit_based_connection_rsp:
             break;
@@ -1740,6 +1741,84 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_response
     else
     {
         LogUtilError() << "No signaling response handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_le_credit_based_connection_req
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_length = 0u;
+
+    if( m_acl_type != acl_type::le_acl )
+    {
+        LogUtilError() << "LeCreditBasedConnectionReq only support LE ACL connection.";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_length ) )
+    {
+        size_parsed = a_size;
+        if( identifier != 0u )
+        {
+            send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        }
+        return size_parsed;
+    }
+
+    //SPSM(2)+SrcCID(2)+MTU(2)+MPS(2)+InitialCredits(2)
+    if( signal_data_length < 10u )
+    {
+        LogUtilWarning() << "LeCreditBasedConnectionReq parse fail: signal data length too small,"
+            " minimum require 10 bytes";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    if( size_left < 10u )
+    {
+        LogUtilWarning() << "LeCreditBasedConnectionReq parse fail: buffer too small for request payload";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    uint16_t spsm = le_to_host16( a_raw_sig + 4 );
+    uint16_t src_cid = le_to_host16( a_raw_sig + 6 );
+    uint16_t mtu = le_to_host16( a_raw_sig + 8 );
+    uint16_t mps = le_to_host16( a_raw_sig + 10 );
+    uint16_t init_credits = le_to_host16( a_raw_sig + 12 );
+    size_left -= 10u;
+    size_parsed += 10u;
+
+    auto req = std::make_shared<l2cap_le_credit_based_connection_request>();
+    req->m_identifier = identifier;
+    req->m_mtu = mtu;
+    req->m_mps = mps;
+    req->m_spsm = spsm;
+    req->m_initial_credits = init_credits;
+    req->set_sender( m_remote_address );
+
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    req->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( req );
+    }
+    else
+    {
+        LogUtilError() << "No signaling request handler!";
     }
 
     return size_parsed;

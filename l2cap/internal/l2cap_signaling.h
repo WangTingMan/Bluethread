@@ -368,6 +368,12 @@ private:
         uint16_t a_size
         );
 
+    uint16_t handle_le_credit_based_connection_req
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
+
     uint16_t handle_unknown_signaling_code( uint8_t const* a_raw_sig, uint16_t a_size );
 
     /**

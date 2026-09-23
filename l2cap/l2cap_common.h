@@ -515,6 +515,19 @@ public:
     conn_param_update_result m_result = conn_param_update_result::invalid_result;
 };
 
+class l2cap_le_credit_based_connection_request : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_le_credit_based_connection_request();
+
+    uint16_t m_spsm;
+    uint16_t m_mtu;
+    uint16_t m_mps;
+    uint16_t m_initial_credits;
+};
+
 struct l2cap_config_local_channel_request
 {
     std::vector<channel_config_option> m_options;

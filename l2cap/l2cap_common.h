@@ -625,6 +625,20 @@ public:
     uint16_t m_local_cid[5] = { 0 };
 };
 
+/* L2CAP_CREDIT_BASED_RECONFIGURE_REQ */
+class l2cap_credit_based_reconfig_request : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_credit_based_reconfig_request();
+
+    uint16_t m_mtu = 0;
+    uint16_t m_mps = 0;
+    uint16_t m_remote_cid_count = 0;
+    uint16_t m_remote_cid[5] = { 0 };
+};
+
 struct l2cap_config_local_channel_request
 {
     std::vector<channel_config_option> m_options;

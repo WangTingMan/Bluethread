@@ -211,6 +211,19 @@ enum class l2cap_credit_conn_result_code : uint16_t
     // Other values: Reserved for future use
 };
 
+/**
+ * @brief L2CAP Credit Based Reconfig Response result code
+ * Reference: Bluetooth Core Spec, Credit Based Reconfiguration signaling (0x1A)
+ */
+enum class l2cap_reconfig_result_code : uint16_t
+{
+    reconfig_success = 0x0000,  /**< Reconfiguration successful */
+    reconfig_fail_mtu_reduce_not_allowed = 0x0001,  /**< Reconfiguration failed - reduction in size of MTU not allowed */
+    reconfig_fail_mps_multi_reduce = 0x0002,  /**< Reconfiguration failed - reduction in size of MPS not allowed for more than one channel at a time */
+    reconfig_fail_invalid_dest_cid = 0x0003,  /**< Reconfiguration failed - one or more Destination CIDs invalid */
+    reconfig_fail_other_unacceptable_params = 0x0004 /**< Reconfiguration failed - other unacceptable parameters */
+};
+
 struct channel_qos_config
 {
     qos_type m_qos_type; // for QoS option
@@ -637,6 +650,17 @@ public:
     uint16_t m_mps = 0;
     uint16_t m_remote_cid_count = 0;
     uint16_t m_remote_cid[5] = { 0 };
+};
+
+/* L2CAP_CREDIT_BASED_RECONFIGURE_RSP */
+class l2cap_credit_based_reconfig_response : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_credit_based_reconfig_response();
+
+    l2cap_reconfig_result_code m_result = l2cap_reconfig_result_code::reconfig_success;
 };
 
 struct l2cap_config_local_channel_request

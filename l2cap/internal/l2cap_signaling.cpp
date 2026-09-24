@@ -478,6 +478,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_credit_based_reconfig_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_reconfigure_rsp:
+            parsed_size = handle_credit_based_reconfig_response( raw_sig_ptr, available_size );
             break;
         default:
             parsed_size = handle_unknown_signaling_code( raw_sig_ptr, available_size );
@@ -554,6 +555,11 @@ bool l2cap_signaling::parse_signaling_header
 
 bool l2cap_signaling::cancel_timer_for_command( uint8_t a_identifier )
 {
+    if( a_identifier == 0x00 )
+    {
+        return false;
+    }
+
     bool found_pending_cmd = false;
     for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
     {
@@ -715,6 +721,7 @@ uint16_t l2cap_signaling::handle_information_response
     uint8_t identifier = a_raw_sig[1];
     size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
     size_parsed += 2;
+    cancel_timer_for_command( identifier );
 
     if( size_left < 2 )
     {
@@ -804,17 +811,6 @@ uint16_t l2cap_signaling::handle_information_response
         m_info_callback( get_acl_handle(), info_type );
     }
 
-    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
-    {
-        auto& ele = *it;
-        if( ele.m_sent_command->m_identifier == identifier )
-        {
-            cancel_timer( ele.m_registered_time_out_timer_id );
-            m_commands_sent.erase( it );
-            break;
-        }
-    }
-
     size_parsed += data_size;
     size_left -= data_size;
     return size_parsed;
@@ -844,6 +840,7 @@ uint16_t l2cap_signaling::handle_command_reject_response
     uint8_t identifier = a_raw_sig[1];
     size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
     size_parsed += 2;
+    cancel_timer_for_command( identifier );
 
     if( size_left < 2 )
     {
@@ -963,17 +960,6 @@ uint16_t l2cap_signaling::handle_command_reject_response
             LogUtilError() << "No signaling handler for unknown command reject reason";
         }
         break;
-    }
-
-    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
-    {
-        auto& ele = *it;
-        if( ele.m_sent_command->m_identifier == identifier )
-        {
-            cancel_timer( ele.m_registered_time_out_timer_id );
-            m_commands_sent.erase( it );
-            break;
-        }
     }
 
     size_parsed += data_size;
@@ -1096,6 +1082,7 @@ uint16_t l2cap_signaling::handle_connection_response
     uint8_t identifier = a_raw_sig[1];
     size_left -= 2; /*Consumed 1 octet for Code field and 1 octet for Identifier field.*/
     size_parsed += 2;
+    cancel_timer_for_command( identifier );
 
     if( size_left < 2 )
     {
@@ -1153,18 +1140,6 @@ uint16_t l2cap_signaling::handle_connection_response
     auto the_controller = framework::framework_manager::get_instance().get_info_manager()
         .get_detail_information<controller>( controller::s_information_name );
     rsp->set_receiver( the_controller->get_address() );
-
-    for (auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it)
-    {
-        auto& ele = *it;
-        if (ele.m_sent_command->m_identifier == identifier)
-        {
-            // great! remote device already response this command.
-            cancel_timer( ele.m_registered_time_out_timer_id );
-            m_commands_sent.erase( it );
-            break;
-        }
-    }
 
     if( m_sig_pkt_handler )
     {
@@ -1326,6 +1301,7 @@ uint16_t l2cap_signaling::handle_config_response
     uint8_t identifier = a_raw_sig[1];
     size_left -= 2u;
     size_parsed += 2u;
+    cancel_timer_for_command( identifier );
 
     if( size_left < 2u )
     {
@@ -1373,18 +1349,6 @@ uint16_t l2cap_signaling::handle_config_response
     if( is_truncated )
     {
         LogUtilError() << "ConfigResponse: remote send truncated configuration options";
-    }
-
-    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
-    {
-        auto& ele = *it;
-        if( ele.m_sent_command->m_identifier == identifier )
-        {
-            // great! remote device already response this command.
-            cancel_timer( ele.m_registered_time_out_timer_id );
-            m_commands_sent.erase( it );
-            break;
-        }
     }
 
     std::shared_ptr<l2cap_config_response> request;
@@ -1521,6 +1485,7 @@ uint16_t l2cap_signaling::handle_disconnect_response
     uint8_t identifier = a_raw_sig[1];
     size_left -= 2u;
     size_parsed += 2u;
+    cancel_timer_for_command( identifier );
 
     if( size_left < 2u )
     {
@@ -1550,23 +1515,6 @@ uint16_t l2cap_signaling::handle_disconnect_response
     uint16_t dest_cid = le_to_host16( a_raw_sig + 6 );
     size_left -= 4u;
     size_parsed += 4u;
-
-    bool found_pending_cmd = false;
-    for( auto it = m_commands_sent.begin(); it != m_commands_sent.end(); ++it )
-    {
-        auto& ele = *it;
-        if( ele.m_sent_command->m_identifier == identifier )
-        {
-            cancel_timer( ele.m_registered_time_out_timer_id );
-            m_commands_sent.erase( it );
-            found_pending_cmd = true;
-            break;
-        }
-    }
-    if( !found_pending_cmd )
-    {
-        LogUtilWarning() << "DisconnectResponse: no pending sent command found, identifier=" << identifier;
-    }
 
     auto request = std::make_shared<l2cap_disconnect_response>();
     request->m_identifier = identifier;
@@ -1703,9 +1651,11 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_response
     if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_length ) )
     {
         size_parsed = a_size;
+        cancel_timer_for_command( identifier );
         return size_parsed;
     }
 
+    cancel_timer_for_command( identifier );
     if( signal_data_length < 2u )
     {
         LogUtilWarning() << "ConnParamUpdateRsp parse fail: signal data length too small, minimum require 2 bytes";
@@ -1723,12 +1673,6 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_response
     uint16_t result_code = le_to_host16( a_raw_sig + 4 );
     size_left -= 2u;
     size_parsed += 2u;
-
-    bool canceled = cancel_timer_for_command( identifier );
-    if( !canceled )
-    {
-        LogUtilWarning() << "ConnParamUpdateRsp: no pending sent command found, identifier=" << identifier;
-    }
 
     auto rsp = std::make_shared<l2cap_connection_parameter_update_response>();
     rsp->m_identifier = identifier;
@@ -1851,9 +1795,11 @@ uint16_t l2cap_signaling::handle_le_credit_based_connection_response
     {
         size_parsed = a_size;
         // Response packet: parse fail, do NOT send command reject
+        cancel_timer_for_command( identifier );
         return size_parsed;
     }
 
+    cancel_timer_for_command( identifier );
     // DestCID(2) + MTU(2) + MPS(2) + InitialCredits(2) + Result(2) = 10 bytes
     if( signal_data_length < 10u )
     {
@@ -1878,12 +1824,6 @@ uint16_t l2cap_signaling::handle_le_credit_based_connection_response
 
     size_left -= 10u;
     size_parsed += 10u;
-
-    bool canceled = cancel_timer_for_command( identifier );
-    if( !canceled )
-    {
-        LogUtilWarning() << "LeCreditBasedConnectionRsp: no pending sent command found, identifier=" << identifier;
-    }
 
     auto rsp = std::make_shared<l2cap_le_credit_based_connection_response>();
     rsp->m_identifier = identifier;
@@ -2109,17 +2049,19 @@ uint16_t l2cap_signaling::handle_credit_based_connection_response
     uint8_t identifier = 0;
     uint16_t signal_data_size = 0u;
     uint32_t signal_data_length = 0u;
+    bool canceled = false;
 
     if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_size ) )
     {
         size_parsed = a_size;
         if( identifier != 0u )
         {
-            send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+            canceled = cancel_timer_for_command( identifier );
         }
         return size_parsed;
     }
     signal_data_length = signal_data_size;
+    cancel_timer_for_command( identifier );
 
     /*
      * Enhanced Credit Based Connection Response (Code=0x18)
@@ -2329,6 +2271,76 @@ uint16_t l2cap_signaling::handle_credit_based_reconfig_request
     else
     {
         LogUtilError() << "CreditBasedReconfigReq: No signaling request handler!";
+    }
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_credit_based_reconfig_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_size = 0u;
+    uint32_t signal_data_length = 0u;
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_size ) )
+    {
+        size_parsed = a_size;
+        cancel_timer_for_command( identifier );
+        return size_parsed;
+    }
+
+    signal_data_length = signal_data_size;
+    cancel_timer_for_command( identifier );
+
+    /*
+     * Credit Based Reconfig Response (Code=0x1A)
+     * Payload: Result(2 octets)
+     * Fixed part total 2 octets, no variable length array
+     */
+    const uint16_t fixed_len = 2u;
+    if( signal_data_length < fixed_len )
+    {
+        LogUtilWarning() << "L2CAP_CREDIT_BASED_RECONFIGURE_RSP parse fail: signal data length too small,"
+            " minimum require " << fixed_len << " bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    if( size_left < fixed_len )
+    {
+        LogUtilWarning() << "L2CAP_CREDIT_BASED_RECONFIGURE_RSP parse fail: buffer too small for fixed payload";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    // Parse Result field (little-endian)
+    uint16_t raw_result = le_to_host16( a_raw_sig + 4 );
+    l2cap_reconfig_result_code result_code;
+    result_code = static_cast<l2cap_reconfig_result_code>( raw_result );
+
+    size_left -= fixed_len;
+    size_parsed += fixed_len;
+
+    auto rsp = std::make_shared<l2cap_credit_based_reconfig_response>();
+    rsp->m_identifier = identifier;
+    rsp->m_result = result_code;
+
+    rsp->set_sender( m_remote_address );
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    rsp->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( rsp );
+    }
+    else
+    {
+        LogUtilError() << "L2CAP_CREDIT_BASED_RECONFIGURE_RSP: No signaling response handler!";
     }
     return size_parsed;
 }

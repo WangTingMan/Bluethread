@@ -576,10 +576,10 @@ public:
 
     l2cap_le_credit_based_connection_request();
 
-    uint16_t m_spsm;
-    uint16_t m_mtu;
-    uint16_t m_mps;
-    uint16_t m_initial_credits;
+    uint16_t m_spsm = 0u;
+    uint16_t m_mtu = 0u;
+    uint16_t m_mps = 0u;
+    uint16_t m_initial_credits = 0u;
 };
 
 class l2cap_le_credit_based_connection_response : public signaling_channel_packet
@@ -589,10 +589,10 @@ public:
 
     l2cap_le_credit_based_connection_response();
 
-    uint16_t m_mtu;
-    uint16_t m_mps;
-    uint16_t m_initial_credits;
-    le_credit_conn_result m_result;
+    uint16_t m_mtu = 0u;
+    uint16_t m_mps = 0u;
+    uint16_t m_initial_credits = 0u;
+    le_credit_conn_result m_result = le_credit_conn_result::connection_refused_no_resources;
 };
 
 class l2cap_le_flow_control_credit_indication : public signaling_channel_packet
@@ -602,8 +602,8 @@ public:
 
     l2cap_le_flow_control_credit_indication();
 
-    uint16_t m_remote_cid;
-    uint16_t m_additional_credits;
+    uint16_t m_remote_cid = 0u;
+    uint16_t m_additional_credits = 0;
 };
 
 /* L2CAP_CREDIT_BASED_CONNECTION_REQ */

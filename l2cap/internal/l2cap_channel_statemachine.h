@@ -35,7 +35,7 @@ public:
         handle_signaling_pkt = 0x01,        // Handle signaling message from remote device
         accept_connection_request = 0x02,   // Let state machine to accpet the connection request
         request_configure_local = 0x03,     // Let state machine send local channel configuration options.
-                                            // The detail options are m_local_config_options
+                                            // The detail options are m_local_channel_config_request
         accept_config_request = 0x04,       // Upper layer request accept coming config request.
         channel_sdu_pkt_from_controller = 0x05, // The upper layer data packet. Only m_channel_data is valid
         channel_sdu_pkt_from_upper = 0x06,  // The upper layer data packet. Only m_channel_data is valid. We need to send out
@@ -49,6 +49,7 @@ public:
     std::shared_ptr<signaling_channel_packet> m_channel_pkt;
     std::shared_ptr<hci_data> m_channel_data;
     connection_req_result m_reason = connection_req_result::connection_refused_security;
+    std::shared_ptr<l2cap_config_local_channel_request> m_local_channel_config_request;
 };
 
 class l2cap_channel_base_state : public state_machine::abstract_state
@@ -443,6 +444,18 @@ private:
      */
     void handle_config_request_internal( std::shared_ptr<l2cap_config_request> const& a_request );
 
+    /**
+     * @brief Internal state machine handler for L2CAP Configuration Request
+     * @warning Do NOT call this function directly from outside the state machine.
+     * It will only be invoked when the channel has transitioned into a valid state
+     * ready to process outgoing ConfigRequest.
+     */
+    void config_local_channel_req_internal
+        (
+        std::shared_ptr<l2cap_config_local_channel_request> const& a_request,
+        l2cap_channel_base_state *a_current_state
+        );
+
     uint16_t m_connection_handle = 0x00;
     uint16_t m_local_channel_id = 0x00;
     uint16_t m_remote_channel_id = 0x00;
@@ -453,7 +466,6 @@ private:
     l2cap_callbacks m_callbacks;
     l2cap_channel_mode m_channel_mode = l2cap_channel_mode::basic_mode;
     std::shared_ptr<l2cap_signaling> m_signaling_channel;
-    std::vector<channel_config_option> m_local_config_options;
 
     /**
      * @brief Caches partial configuration options from L2CAP CONFIGURATION_REQ with continuation flag set.

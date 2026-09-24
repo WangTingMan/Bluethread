@@ -486,17 +486,19 @@ bool l2cap_channel_wait_config_state::handle_event
     switch( event_->m_type )
     {
     case l2cap_channel_event::event_type::request_configure_local:
-        if( get_statemachine().m_local_config_options.empty() )
+        if( !event_->m_local_channel_config_request )
         {
-            LogUtilError() << "No channel configuration to set";
+            LogUtilError() << "Empty channel configuration";
             return false;
         }
-        get_statemachine().m_signaling_channel->send_config_request
-            (
-            get_statemachine().m_remote_channel_id,
-            get_statemachine().m_local_config_options
-            );
-        transition_to_state( l2cap_channel_state_type::wait_config_req_rsp );
+
+        if( event_->m_local_channel_config_request->m_options.empty() )
+        {
+            LogUtilError() << "No channel configuration";
+            return false;
+        }
+
+        get_statemachine().config_local_channel_req_internal( event_->m_local_channel_config_request, this );
         break;
     case l2cap_channel_event::event_type::handle_signaling_pkt:
         handle_signaling_packet( event_->m_channel_pkt );
@@ -1460,10 +1462,10 @@ void l2cap_channel_statemachine::handle_disconnect_request( std::shared_ptr<l2ca
 
 void l2cap_channel_statemachine::config_local_channel_req( std::shared_ptr<l2cap_config_local_channel_request> const& a_request )
 {
-    m_local_config_options = std::move( a_request->m_options );
     std::shared_ptr<l2cap_channel_event> event_;
     event_ = std::make_shared<l2cap_channel_event>();
     event_->m_type = l2cap_channel_event::event_type::request_configure_local;
+    event_->m_local_channel_config_request = a_request;
 
     handle_event( event_ );
 }
@@ -1674,6 +1676,56 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
     {
         callbacks.m_coming_config_callback( a_request );
     }
+}
+
+void l2cap_channel_statemachine::config_local_channel_req_internal
+    (
+    std::shared_ptr<l2cap_config_local_channel_request> const& a_request,
+    l2cap_channel_base_state* a_current_state
+    )
+{
+    for( auto& option_ : a_request->m_options )
+    {
+        switch( option_.m_type )
+        {
+        case channel_config_option_type::mtu:
+            if( option_.m_option.m_mtu < 48 &&
+                m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
+                )
+            {
+                option_.m_option.m_mtu = 48;
+                break;
+            }
+
+            if( option_.m_option.m_mtu < 23 &&
+                m_signaling_channel->get_acl_type() == acl_type::le_acl
+                )
+            {
+                option_.m_option.m_mtu = 23;
+                break;
+            }
+
+            if( m_mtu_is_default_value )
+            {
+                m_mtu = option_.m_option.m_mtu;
+                m_mtu_is_default_value = false;
+            }
+            else
+            {
+                m_mtu = m_mtu > option_.m_option.m_mtu ? option_.m_option.m_mtu : m_mtu;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    m_signaling_channel->send_config_request
+        (
+        m_remote_channel_id,
+        a_request->m_options
+        );
+    a_current_state->transition_to_state( l2cap_channel_state_type::wait_config_req_rsp );
 }
 
 }

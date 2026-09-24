@@ -67,6 +67,15 @@ l2cap_signaling::l2cap_signaling( uint16_t a_handle )
     m_sig_header.set_broadcast_flag( 0x00 );
 }
 
+l2cap_signaling::~l2cap_signaling()
+{
+    for( auto& cmd : m_commands_sent )
+    {
+        cancel_timer( cmd.m_registered_time_out_timer_id );
+    }
+    m_commands_sent.clear();
+}
+
 void l2cap_signaling::set_packet_boundary( uint8_t a_pb_flag )
 {
     m_sig_header.set_packet_boundary( a_pb_flag );
@@ -488,6 +497,18 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
         raw_sig_ptr += parsed_size;
         available_size -= parsed_size;
 
+        if( parsed_size == 0 )
+        {
+            LogUtilError() << "parsed_size is zero, breaking to avoid infinite loop";
+            break;
+        }
+
+        if( parsed_size > available_size )
+        {
+            LogUtilError() << "parsed_size exceeds available_size, corrupt packet";
+            break;
+        }
+
         if( get_acl_type() == acl_type::le_acl )
         {
             /* one signaling rqeust/response in one signaling packet on LE signaling channel.
@@ -501,7 +522,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
 bool l2cap_signaling::signaling_length_valid( std::shared_ptr<hci_data> const& hci_data )
 {
     uint16_t signaling_data_size = le_to_host16( hci_data->m_buffer.data() + s_l2cap_signaling_offset + 2);
-    uint16_t expected_size = signaling_data_size + s_l2cap_signaling_offset + 4;
+    uint32_t expected_size = signaling_data_size + s_l2cap_signaling_offset + 4;
     if( expected_size == hci_data->m_buffer.size() )
     {
         return true;
@@ -1464,13 +1485,6 @@ uint16_t l2cap_signaling::handle_disconnect_response
     uint16_t size_parsed = 0u;
     uint16_t size_left = a_size;
     uint16_t signal_data_length = 0u;
-
-    if( m_acl_type == acl_type::le_acl )
-    {
-        LogUtilError() << "LE ACL disconnect response is not supported.";
-        size_parsed = a_size;
-        return size_parsed;
-    }
 
     /*
      * At least 2 octets required to read Code and Identifier from signaling header.
@@ -2572,33 +2586,6 @@ uint16_t l2cap_signaling::handle_echo_response
     size_parsed += data_size;
     size_left -= data_size;
     return size_parsed;
-}
-
-void l2cap_signaling::send_command_reject_response
-    (
-    uint8_t a_identifier,
-    uint16_t a_reason,
-    void* a_optional_data,
-    uint16_t a_optional_size
-    )
-{
-    m_sig_header.set_identifier( a_identifier );
-    m_sig_header.set_signaling_code( signaling_code::l2cap_command_reject_rsp );
-    m_sig_header.set_sdu_length( 2 + a_optional_size );
-
-    uint8_t write_buffer[100];
-    uint16_t buffer_size = 0;
-    stream_writer writer;
-    writer.set_buffer( write_buffer + m_sig_header.header_size(), sizeof( write_buffer )
-        - m_sig_header.header_size() );
-    writer << a_reason;
-    writer.write_buffer( reinterpret_cast< uint8_t* >( a_optional_data ), a_optional_size );
-
-    buffer_size += writer.wrote_size();
-    m_sig_header.to_raw_buffer( write_buffer, sizeof( write_buffer ) - buffer_size );
-    buffer_size += m_sig_header.header_size();
-
-    send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
 }
 
 void l2cap_signaling::send_completed_acl_packet( std::vector<uint8_t> a_acl_packet )

@@ -75,6 +75,8 @@ public:
       */
     l2cap_signaling( uint16_t a_handle = 0x00 );
 
+    ~l2cap_signaling();
+
     void set_sig_pkt_handler( sig_pkt_handler a_handler )
     {
         m_sig_pkt_handler = a_handler;
@@ -411,17 +413,6 @@ private:
         );
 
     uint16_t handle_unknown_signaling_code( uint8_t const* a_raw_sig, uint16_t a_size );
-
-    /**
-     * Send command reject response
-     */
-    void send_command_reject_response
-        (
-        uint8_t a_identifier,
-        uint16_t a_reason,
-        void* a_optional_data,
-        uint16_t a_optional_size
-        );
 
     void send_completed_acl_packet( std::vector<uint8_t> a_acl_packet );
 

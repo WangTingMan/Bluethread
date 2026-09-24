@@ -722,6 +722,20 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
         LogUtilError() << "Remote device should not use continue flag when support ext-flow";
     }
 
+    for( auto option_type : a_request->m_unkown_option_types )
+    {
+        if( ( option_type & 0x80 ) == 0 )
+        {
+            /*
+             *If the most significant bit of the type is 0 (i.e. types 0x00 to 0x7F), the recipient shall
+             *refuse the entire configuration request.
+             */
+            need_reject = true;
+            get_statemachine().m_cached_incoming_continue_configs.clear();
+            break;
+        }
+    }
+
     if( need_reject || a_request->m_is_truncted )
     {
         LogUtilError() << "reject remote device's configuration request.";

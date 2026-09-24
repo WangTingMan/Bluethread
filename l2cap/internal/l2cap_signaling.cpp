@@ -228,6 +228,10 @@ uint8_t l2cap_signaling::send_config_request
     m_sig_header.to_raw_buffer( write_buffer, sizeof( write_buffer ) - buffer_size );
     buffer_size += m_sig_header.header_size();
 
+    // TODO: Handle remote ConfigReject with MTU exceeded reason.
+    // If peer rejects configuration request because our requested MTU exceeds peer capability,
+    // implement MTU renegotiation logic to pick a smaller compatible MTU.
+    // Defer this feature to later milestone.
     send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
     return identifier;
 }

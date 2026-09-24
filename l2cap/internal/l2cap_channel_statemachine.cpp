@@ -731,6 +731,8 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
              *refuse the entire configuration request.
              */
             need_reject = true;
+            LogUtilError() << "the most significant bit of the type is 0 and it is unknown option type."
+                << " so we need reject.";
             get_statemachine().m_cached_incoming_continue_configs.clear();
             break;
         }
@@ -739,6 +741,46 @@ void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared
     if( need_reject || a_request->m_is_truncted )
     {
         LogUtilError() << "reject remote device's configuration request.";
+        get_statemachine().m_signaling_channel->send_config_response
+            ( a_request->m_identifier, get_statemachine().m_remote_channel_id, 0x00,
+            channel_config_result::unknown_options_failed, a_request->m_options );
+        return;
+    }
+
+    for( auto& option_ : a_request->m_options )
+    {
+        switch( option_.m_type )
+        {
+        case channel_config_option_type::mtu:
+            if( option_.m_option.m_mtu < 48 &&
+                get_statemachine().m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
+              )
+            {
+                need_reject = true;
+                break;
+            }
+
+            if( option_.m_option.m_mtu < 23 &&
+                get_statemachine().m_signaling_channel->get_acl_type() == acl_type::le_acl
+              )
+            {
+                need_reject = true;
+                break;
+            }
+            break;
+        default:
+            break;
+        }
+
+        if( need_reject )
+        {
+            break;
+        }
+    }
+
+    if( need_reject )
+    {
+        LogUtilError() << "Parameter value unacceptable.";
         get_statemachine().m_signaling_channel->send_config_response
             ( a_request->m_identifier, get_statemachine().m_remote_channel_id, 0x00,
             channel_config_result::unacceptable_parameters_failed, a_request->m_options );

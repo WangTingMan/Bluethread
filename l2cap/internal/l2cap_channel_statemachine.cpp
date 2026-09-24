@@ -694,140 +694,7 @@ void l2cap_channel_wait_config_req_rsp_state::on_exit()
 
 void l2cap_channel_wait_config_req_rsp_state::handle_config_request( std::shared_ptr<l2cap_config_request> const& a_request )
 {
-    auto& callbacks = get_statemachine().m_callbacks;
-    if( !callbacks.m_coming_config_callback )
-    {
-        LogUtilError() << "Not set configuration callback.";
-        return;
-    }
-
-    a_request->m_source_cid = get_statemachine().m_remote_channel_id;
-
-    bool need_reject = false;
-    if( a_request->m_continue_flag &&
-        a_request->m_remote_edr_ext_flow_support &&
-        get_statemachine().m_signaling_channel->get_acl_type() == acl_type::br_edr_acl &&
-        l2cap_signaling::s_extended_flow_specification_edr_support != 0x00 )
-    {
-        /*
-         * Bluetooth Core Specification Vol3 PartA:
-         * The Extended Flow Specification is an L2CAP entity capability, not a per-channel negotiated attribute.
-         * If both local and remote L2CAP entities support this extension,
-         * the Continuation flag in all L2CAP_CONFIGURATION_REQ and L2CAP_CONFIGURATION_RSP packets
-         * shall be set to 0. The configuration option fragmentation mechanism must not be used.
-         * A packet with Continuation flag set to 1 is treated as invalid configuration parameter.
-         * Respond with CONFIGURATION_RSP to reject this configuration negotiation.
-         */
-        need_reject = true;
-        LogUtilError() << "Remote device should not use continue flag when support ext-flow";
-    }
-
-    for( auto option_type : a_request->m_unkown_option_types )
-    {
-        if( ( option_type & 0x80 ) == 0 )
-        {
-            /*
-             *If the most significant bit of the type is 0 (i.e. types 0x00 to 0x7F), the recipient shall
-             *refuse the entire configuration request.
-             */
-            need_reject = true;
-            LogUtilError() << "the most significant bit of the type is 0 and it is unknown option type."
-                << " so we need reject.";
-            get_statemachine().m_cached_incoming_continue_configs.clear();
-            break;
-        }
-    }
-
-    if( need_reject || a_request->m_is_truncted )
-    {
-        LogUtilError() << "reject remote device's configuration request.";
-        get_statemachine().m_signaling_channel->send_config_response
-            ( a_request->m_identifier, get_statemachine().m_remote_channel_id, 0x00,
-            channel_config_result::unknown_options_failed, a_request->m_options );
-        return;
-    }
-
-    for( auto& option_ : a_request->m_options )
-    {
-        switch( option_.m_type )
-        {
-        case channel_config_option_type::mtu:
-            if( option_.m_option.m_mtu < 48 &&
-                get_statemachine().m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
-              )
-            {
-                need_reject = true;
-                break;
-            }
-
-            if( option_.m_option.m_mtu < 23 &&
-                get_statemachine().m_signaling_channel->get_acl_type() == acl_type::le_acl
-              )
-            {
-                need_reject = true;
-                break;
-            }
-            break;
-        default:
-            break;
-        }
-
-        if( need_reject )
-        {
-            break;
-        }
-    }
-
-    if( need_reject )
-    {
-        LogUtilError() << "Parameter value unacceptable.";
-        get_statemachine().m_signaling_channel->send_config_response
-            ( a_request->m_identifier, get_statemachine().m_remote_channel_id, 0x00,
-            channel_config_result::unacceptable_parameters_failed, a_request->m_options );
-        return;
-    }
-
-    if( a_request->m_continue_flag )
-    {
-        /**
-         * Continuation flag set: more configuration fragments will follow.
-         * According to L2CAP spec, every CONFIGURATION_REQ must be responded.
-         * Reply with Success and empty options now; full validation and negotiation
-         * will be performed after receiving the final fragment (continue_flag = 0).
-         */
-        LogUtilInfo() << "cache continue configuration options,"
-            " we will complete negotiation after receiving final fragment.";
-        get_statemachine().cache_continue_config_options( a_request->m_options );
-        std::vector<channel_config_option> empty_config;
-        get_statemachine().m_signaling_channel->send_config_response
-            (
-            a_request->m_identifier,
-            get_statemachine().m_remote_channel_id,
-            0x00,
-            channel_config_result::success,
-            empty_config
-            );
-        return;
-    }
-
-    if( !get_statemachine().m_cached_incoming_continue_configs.empty() )
-    {
-        get_statemachine().cache_continue_config_options( a_request->m_options );
-        a_request->m_options = std::move( get_statemachine().m_cached_incoming_continue_configs );
-    }
-
-    if( !callbacks.m_handle_module.empty() )
-    {
-        std::shared_ptr<executable_task> task;
-        task = std::make_shared<executable_task>();
-        task->set_fun( std::bind( callbacks.m_coming_config_callback, a_request ), callbacks.m_handle_module );
-        task->set_source_module( l2cap_module::s_l2cap_module_name );
-        framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
-    }
-    else
-    {
-        callbacks.m_coming_config_callback( a_request );
-    }
+    get_statemachine().handle_config_request_internal( a_request );
 }
 
 void l2cap_channel_wait_config_req_rsp_state::handle_config_response( std::shared_ptr<l2cap_config_response> const& a_response )
@@ -1660,6 +1527,152 @@ void l2cap_channel_statemachine::cache_continue_config_options( std::vector<chan
             // New option type, append to cache
             m_cached_incoming_continue_configs.push_back( new_opt );
         }
+    }
+}
+
+void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr<l2cap_config_request> const& a_request )
+{
+    auto& callbacks = m_callbacks;
+    if( !callbacks.m_coming_config_callback )
+    {
+        LogUtilError() << "Not set configuration callback.";
+        return;
+    }
+
+    a_request->m_source_cid = m_remote_channel_id;
+
+    bool need_reject = false;
+    if( a_request->m_continue_flag &&
+        a_request->m_remote_edr_ext_flow_support &&
+        m_signaling_channel->get_acl_type() == acl_type::br_edr_acl &&
+        l2cap_signaling::s_extended_flow_specification_edr_support != 0x00 )
+    {
+        /*
+         * Bluetooth Core Specification Vol3 PartA:
+         * The Extended Flow Specification is an L2CAP entity capability, not a per-channel negotiated attribute.
+         * If both local and remote L2CAP entities support this extension,
+         * the Continuation flag in all L2CAP_CONFIGURATION_REQ and L2CAP_CONFIGURATION_RSP packets
+         * shall be set to 0. The configuration option fragmentation mechanism must not be used.
+         * A packet with Continuation flag set to 1 is treated as invalid configuration parameter.
+         * Respond with CONFIGURATION_RSP to reject this configuration negotiation.
+         */
+        need_reject = true;
+        LogUtilError() << "Remote device should not use continue flag when support ext-flow";
+    }
+
+    for( auto option_type : a_request->m_unkown_option_types )
+    {
+        if( ( option_type & 0x80 ) == 0 )
+        {
+            /*
+             *If the most significant bit of the type is 0 (i.e. types 0x00 to 0x7F), the recipient shall
+             *refuse the entire configuration request.
+             */
+            need_reject = true;
+            LogUtilError() << "the most significant bit of the type is 0 and it is unknown option type."
+                << " so we need reject.";
+            m_cached_incoming_continue_configs.clear();
+            break;
+        }
+    }
+
+    if( need_reject || a_request->m_is_truncted )
+    {
+        LogUtilError() << "reject remote device's configuration request.";
+        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id, 0x00,
+            channel_config_result::unknown_options_failed, a_request->m_options );
+        return;
+    }
+
+    for( auto& option_ : a_request->m_options )
+    {
+        switch( option_.m_type )
+        {
+        case channel_config_option_type::mtu:
+            if( option_.m_option.m_mtu < 48 &&
+                m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
+                )
+            {
+                need_reject = true;
+                break;
+            }
+
+            if( option_.m_option.m_mtu < 23 &&
+                m_signaling_channel->get_acl_type() == acl_type::le_acl
+                )
+            {
+                need_reject = true;
+                break;
+            }
+
+            if( m_mtu_is_default_value )
+            {
+                m_mtu = option_.m_option.m_mtu;
+                m_mtu_is_default_value = false;
+            }
+            else
+            {
+                m_mtu = m_mtu > option_.m_option.m_mtu ? option_.m_option.m_mtu : m_mtu;
+            }
+            break;
+        default:
+            break;
+        }
+
+        if( need_reject )
+        {
+            break;
+        }
+    }
+
+    if( need_reject )
+    {
+        LogUtilError() << "Parameter value unacceptable.";
+        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id, 0x00,
+            channel_config_result::unacceptable_parameters_failed, a_request->m_options );
+        return;
+    }
+
+    if( a_request->m_continue_flag )
+    {
+        /**
+         * Continuation flag set: more configuration fragments will follow.
+         * According to L2CAP spec, every CONFIGURATION_REQ must be responded.
+         * Reply with Success and empty options now; full validation and negotiation
+         * will be performed after receiving the final fragment (continue_flag = 0).
+         */
+        LogUtilInfo() << "cache continue configuration options,"
+            " we will complete negotiation after receiving final fragment.";
+        cache_continue_config_options( a_request->m_options );
+        std::vector<channel_config_option> empty_config;
+        m_signaling_channel->send_config_response
+            (
+            a_request->m_identifier,
+            m_remote_channel_id,
+            0x00,
+            channel_config_result::success,
+            empty_config
+            );
+        return;
+    }
+
+    if( !m_cached_incoming_continue_configs.empty() )
+    {
+        cache_continue_config_options( a_request->m_options );
+        a_request->m_options = std::move( m_cached_incoming_continue_configs );
+    }
+
+    if( !callbacks.m_handle_module.empty() )
+    {
+        std::shared_ptr<executable_task> task;
+        task = std::make_shared<executable_task>();
+        task->set_fun( std::bind( callbacks.m_coming_config_callback, a_request ), callbacks.m_handle_module );
+        task->set_source_module( l2cap_module::s_l2cap_module_name );
+        framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+    }
+    else
+    {
+        callbacks.m_coming_config_callback( a_request );
     }
 }
 

@@ -469,6 +469,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_le_flow_control_credit_ind( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_connection_req:
+            parsed_size = handle_credit_based_connection_req( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_connection_rsp:
             break;
@@ -1962,6 +1963,128 @@ uint16_t l2cap_signaling::handle_le_flow_control_credit_ind
     else
     {
         LogUtilError() << "No signaling indication handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_credit_based_connection_req
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_size = 0u;
+    uint32_t signal_data_length = 0u;
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_size ) )
+    {
+        size_parsed = a_size;
+        if( identifier != 0u )
+        {
+            send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        }
+        return size_parsed;
+    }
+    signal_data_length = signal_data_size;
+
+    // Fixed part: SPSM(2)+MTU(2)+MPS(2)+InitialCredits(2)+RemoteCIDCount(2) = 10 bytes
+    const uint16_t fixed_len = 10u;
+    if( signal_data_length < fixed_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: signal data length too small,"
+            " minimum require " << fixed_len << " bytes";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+    if( size_left < fixed_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: buffer too small for fixed payload";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    uint16_t spsm = le_to_host16( a_raw_sig + 4 );
+    uint16_t mtu = le_to_host16( a_raw_sig + 6 );
+    uint16_t mps = le_to_host16( a_raw_sig + 8 );
+    uint16_t init_credits = le_to_host16( a_raw_sig + 10 );
+    uint32_t cid_count = le_to_host16( a_raw_sig + 12 );
+    uint32_t var_payload_len = cid_count * 2u;
+    constexpr uint16_t max_cid_cnt = 5u;
+
+    if( var_payload_len > UINT16_MAX )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: var payload length exceed uint16 max";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    if( signal_data_length < fixed_len + var_payload_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: signal data length insufficient for cid array";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    if( size_left < static_cast<uint16_t>( fixed_len + var_payload_len ) )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: buffer too small for cid array";
+        size_parsed = a_size;
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    if( cid_count > max_cid_cnt )
+    {
+        LogUtilWarning() << "CreditBasedConnectionReq parse fail: remote cid count("
+            << cid_count << ") exceeds max limit " << max_cid_cnt;
+        size_parsed += fixed_len + static_cast<uint16_t>( var_payload_len );
+        if( size_parsed > a_size )
+        {
+            size_parsed = a_size;
+        }
+        send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        return size_parsed;
+    }
+
+    size_left -= fixed_len;
+    size_parsed += fixed_len;
+
+    auto req = std::make_shared<l2cap_credit_based_connection_request>();
+    req->m_identifier = identifier;
+    req->m_spsm = spsm;
+    req->m_mtu = mtu;
+    req->m_mps = mps;
+    req->m_initial_credits = init_credits;
+    req->m_remote_cid_count = static_cast<uint16_t>( cid_count );;
+
+    for( uint32_t i = 0; i < cid_count; i++ )
+    {
+        req->m_remote_cid[i] = le_to_host16( a_raw_sig + 4 + fixed_len + i * 2u );
+    }
+
+    size_left -= static_cast<uint16_t>( var_payload_len );
+    size_parsed += static_cast<uint16_t>( var_payload_len );
+
+    req->set_sender( m_remote_address );
+    auto the_controller = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<controller>( controller::s_information_name );
+    req->set_receiver( the_controller->get_address() );
+
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( req );
+    }
+    else
+    {
+        LogUtilError() << "No signaling request handler!";
     }
 
     return size_parsed;

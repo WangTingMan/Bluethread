@@ -260,6 +260,11 @@ l2cap_le_flow_control_credit_indication::l2cap_le_flow_control_credit_indication
     m_signaling_code = signaling_code::l2cap_flow_control_credit_ind;
 }
 
+l2cap_credit_based_connection_request::l2cap_credit_based_connection_request()
+{
+    m_signaling_code = signaling_code::l2cap_credit_based_connection_req;
+}
+
 uint16_t retrieve_local_cid( std::shared_ptr<hci_data> const& a_acl_data )
 {
     uint16_t local_cid = 0x00;

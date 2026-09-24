@@ -570,6 +570,22 @@ public:
     uint16_t m_additional_credits;
 };
 
+/* L2CAP_CREDIT_BASED_CONNECTION_REQ */
+class l2cap_credit_based_connection_request : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_credit_based_connection_request();
+
+    uint16_t m_spsm = 0;
+    uint16_t m_mtu = 0;
+    uint16_t m_mps = 0;
+    uint16_t m_initial_credits = 0;
+    uint16_t m_remote_cid_count = 0;
+    uint16_t m_remote_cid[5] = { 0 };
+};
+
 struct l2cap_config_local_channel_request
 {
     std::vector<channel_config_option> m_options;

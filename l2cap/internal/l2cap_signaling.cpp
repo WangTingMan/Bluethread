@@ -1992,8 +1992,12 @@ uint16_t l2cap_signaling::handle_credit_based_connection_request
     }
     signal_data_length = signal_data_size;
 
-    // Fixed part: SPSM(2)+MTU(2)+MPS(2)+InitialCredits(2)+RemoteCIDCount(2) = 10 bytes
-    const uint16_t fixed_len = 10u;
+    /*
+     * Enhanced Credit Based Connection Request (Code=0x17)
+     * Payload: SPSM(2) + MTU(2) + MPS(2) + InitialCredits(2) + SourceCID[]
+     * Fixed part total 8 octets, SourceCID count derived from remaining payload bytes
+     */
+    const uint16_t fixed_len = 8u;
     if( signal_data_length < fixed_len )
     {
         LogUtilWarning() << "CreditBasedConnectionReq parse fail: signal data length too small,"
@@ -2010,12 +2014,14 @@ uint16_t l2cap_signaling::handle_credit_based_connection_request
         return size_parsed;
     }
 
+    // Parse fixed fields strictly follow spec table order
     uint16_t spsm = le_to_host16( a_raw_sig + 4 );
     uint16_t mtu = le_to_host16( a_raw_sig + 6 );
     uint16_t mps = le_to_host16( a_raw_sig + 8 );
     uint16_t init_credits = le_to_host16( a_raw_sig + 10 );
-    uint32_t cid_count = le_to_host16( a_raw_sig + 12 );
-    uint32_t var_payload_len = cid_count * 2u;
+
+    uint32_t source_cid_count = ( signal_data_length - fixed_len ) / 2u;
+    uint32_t var_payload_len = source_cid_count * 2u;
     constexpr uint16_t max_cid_cnt = 5u;
 
     if( var_payload_len > UINT16_MAX )
@@ -2042,10 +2048,10 @@ uint16_t l2cap_signaling::handle_credit_based_connection_request
         return size_parsed;
     }
 
-    if( cid_count > max_cid_cnt )
+    if( source_cid_count > max_cid_cnt )
     {
         LogUtilWarning() << "CreditBasedConnectionReq parse fail: remote cid count("
-            << cid_count << ") exceeds max limit " << max_cid_cnt;
+            << source_cid_count << ") exceeds max limit " << max_cid_cnt;
         size_parsed += fixed_len + static_cast<uint16_t>( var_payload_len );
         if( size_parsed > a_size )
         {
@@ -2064,9 +2070,9 @@ uint16_t l2cap_signaling::handle_credit_based_connection_request
     req->m_mtu = mtu;
     req->m_mps = mps;
     req->m_initial_credits = init_credits;
-    req->m_remote_cid_count = static_cast<uint16_t>( cid_count );;
+    req->m_remote_cid_count = static_cast<uint16_t>( source_cid_count );;
 
-    for( uint32_t i = 0; i < cid_count; i++ )
+    for( uint32_t i = 0; i < source_cid_count; i++ )
     {
         req->m_remote_cid[i] = le_to_host16( a_raw_sig + 4 + fixed_len + i * 2u );
     }

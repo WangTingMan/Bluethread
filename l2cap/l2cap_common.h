@@ -188,6 +188,29 @@ enum class le_credit_conn_result : uint16_t
     connection_refused_unacceptable_parameters = 0x000B ///< Connection refused - unacceptable parameters
 };
 
+/**
+ * @brief L2CAP Credit Based Connection Response result code (ECBFC)
+ * Bluetooth Core Spec: Result field in Credit Based Connection Response
+ */
+enum class l2cap_credit_conn_result_code : uint16_t
+{
+    all_success = 0x0000, ///< All connections successful
+    all_refused_spsm_not_supported = 0x0002, ///< All connections refused 每 SPSM not supported
+    some_refused_insufficient_res = 0x0004, ///< Some connections refused 每 insufficient resources available
+    all_refused_insufficient_auth = 0x0005, ///< All connections refused 每 insufficient authentication
+    all_refused_insufficient_authz = 0x0006, ///< All connections refused 每 insufficient authorization
+    all_refused_key_size_too_short = 0x0007, ///< All connections refused 每 encryption key size too short
+    all_refused_insufficient_enc = 0x0008, ///< All connections refused 每 insufficient encryption
+    some_refused_invalid_src_cid = 0x0009, ///< Some connections refused 每 invalid Source CID
+    some_refused_src_cid_allocated = 0x000A, ///< Some connections refused 每 Source CID already allocated
+    all_refused_unacceptable_param = 0x000B, ///< All connections refused 每 unacceptable parameters
+    all_refused_invalid_param = 0x000C, ///< All connections refused 每 invalid parameters
+    all_pending_no_info = 0x000D, ///< All connections pending 每 no further information available
+    all_pending_auth_pending = 0x000E, ///< All connections pending 每 authentication pending
+    all_pending_authz_pending = 0x000F, ///< All connections pending 每 authorization pending
+    // Other values: Reserved for future use
+};
+
 struct channel_qos_config
 {
     qos_type m_qos_type; // for QoS option
@@ -584,6 +607,22 @@ public:
     uint16_t m_initial_credits = 0;
     uint16_t m_remote_cid_count = 0;
     uint16_t m_remote_cid[5] = { 0 };
+};
+
+/* L2CAP_CREDIT_BASED_CONNECTION_RSP */
+class l2cap_credit_based_connection_response : public signaling_channel_packet
+{
+
+public:
+
+    l2cap_credit_based_connection_response();
+
+    uint16_t m_mtu = 0;
+    uint16_t m_mps = 0;
+    uint16_t m_initial_credits = 0;
+    l2cap_credit_conn_result_code m_result = l2cap_credit_conn_result_code::all_success;
+    uint16_t m_local_cid_count = 0;
+    uint16_t m_local_cid[5] = { 0 };
 };
 
 struct l2cap_config_local_channel_request

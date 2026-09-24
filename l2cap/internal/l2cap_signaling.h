@@ -386,7 +386,13 @@ private:
         uint16_t a_size
         );
 
-    uint16_t handle_credit_based_connection_req
+    uint16_t handle_credit_based_connection_request
+        (
+        uint8_t const* a_raw_sig,
+        uint16_t a_size
+        );
+
+    uint16_t handle_credit_based_connection_response
         (
         uint8_t const* a_raw_sig,
         uint16_t a_size

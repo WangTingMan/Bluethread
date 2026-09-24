@@ -469,9 +469,10 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             parsed_size = handle_le_flow_control_credit_ind( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_connection_req:
-            parsed_size = handle_credit_based_connection_req( raw_sig_ptr, available_size );
+            parsed_size = handle_credit_based_connection_request( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_connection_rsp:
+            parsed_size = handle_credit_based_connection_response( raw_sig_ptr, available_size );
             break;
         case bluetooth::signaling_code::l2cap_credit_based_reconfigure_req:
             break;
@@ -1968,7 +1969,7 @@ uint16_t l2cap_signaling::handle_le_flow_control_credit_ind
     return size_parsed;
 }
 
-uint16_t l2cap_signaling::handle_credit_based_connection_req
+uint16_t l2cap_signaling::handle_credit_based_connection_request
     (
     uint8_t const* a_raw_sig,
     uint16_t a_size
@@ -2085,6 +2086,121 @@ uint16_t l2cap_signaling::handle_credit_based_connection_req
     else
     {
         LogUtilError() << "No signaling request handler!";
+    }
+
+    return size_parsed;
+}
+
+uint16_t l2cap_signaling::handle_credit_based_connection_response
+    (
+    uint8_t const* a_raw_sig,
+    uint16_t a_size
+    )
+{
+    uint16_t size_parsed = 0u;
+    uint16_t size_left = a_size;
+    uint8_t identifier = 0;
+    uint16_t signal_data_size = 0u;
+    uint32_t signal_data_length = 0u;
+
+    if( !parse_signaling_header( a_raw_sig, size_left, size_parsed, identifier, signal_data_size ) )
+    {
+        size_parsed = a_size;
+        if( identifier != 0u )
+        {
+            send_reject_rsp( identifier, l2cap_command_reject_reason::unknown_command, nullptr, 0 );
+        }
+        return size_parsed;
+    }
+    signal_data_length = signal_data_size;
+
+    /*
+     * Enhanced Credit Based Connection Response (Code=0x18)
+     * Payload: MTU(2) + MPS(2) + InitialCredits(2) + Result(2) + DestinationCID[]
+     * Fixed part total 8 octets
+     */
+    const uint16_t fixed_len = 8u;
+    if( signal_data_length < fixed_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: signal data length too small, minimum require " << fixed_len << " bytes";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    if( size_left < fixed_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: buffer too small for fixed payload";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+
+    // Parse fixed fields strictly follow spec table order
+    uint16_t mtu = le_to_host16( a_raw_sig + 4 );
+    uint16_t mps = le_to_host16( a_raw_sig + 6 );
+    uint16_t init_credits = le_to_host16( a_raw_sig + 8 );
+    uint16_t raw_result = le_to_host16( a_raw_sig + 10 );
+
+    // Number of Destination CID = (signal_data_length - fixed_len) / 2
+    uint32_t dest_cid_count = ( signal_data_length - fixed_len ) / 2u;
+    uint32_t var_payload_len = dest_cid_count * 2u;
+    constexpr uint16_t max_dest_cid_cnt = 5u;
+
+    if( var_payload_len > UINT16_MAX )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: var payload length exceed uint16 max";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    if( signal_data_length < fixed_len + var_payload_len )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: signal data length insufficient for destination CID array";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    if( size_left < static_cast<uint16_t>( fixed_len + var_payload_len ) )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: buffer too small for destination CID array";
+        size_parsed = a_size;
+        return size_parsed;
+    }
+    if( dest_cid_count > max_dest_cid_cnt )
+    {
+        LogUtilWarning() << "CreditBasedConnectionRsp parse fail: destination cid count("
+            << dest_cid_count << ") exceeds max limit " << max_dest_cid_cnt;
+        size_parsed += fixed_len + static_cast<uint16_t>( var_payload_len );
+        if( size_parsed > a_size )
+        {
+            size_parsed = a_size;
+        }
+        return size_parsed;
+    }
+
+    size_left -= fixed_len;
+    size_parsed += fixed_len;
+
+    auto rsp = std::make_shared<l2cap_credit_based_connection_response>();
+    rsp->m_identifier = identifier;
+    rsp->m_mtu = mtu;
+    rsp->m_mps = mps;
+    rsp->m_initial_credits = init_credits;
+    rsp->m_result = static_cast<l2cap_credit_conn_result_code>( raw_result );
+    rsp->m_local_cid_count = static_cast<uint16_t>( dest_cid_count );
+
+    for( uint32_t i = 0; i < dest_cid_count; i++ )
+    {
+        rsp->m_local_cid[i] = le_to_host16( a_raw_sig + 4 + fixed_len + i * 2u );
+    }
+
+    size_left -= static_cast<uint16_t>( var_payload_len );
+    size_parsed += static_cast<uint16_t>( var_payload_len );
+
+    // Deliver parsed packet to upper handler
+    if( m_sig_pkt_handler )
+    {
+        m_sig_pkt_handler( rsp );
+    }
+    else
+    {
+        LogUtilError() << "CreditBasedConnectionRsp: No signaling packet handler!";
     }
 
     return size_parsed;

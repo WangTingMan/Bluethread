@@ -224,6 +224,37 @@ enum class l2cap_reconfig_result_code : uint16_t
     reconfig_fail_other_unacceptable_params = 0x0004 /**< Reconfiguration failed - other unacceptable parameters */
 };
 
+/**
+ * @brief L2CAP channel operating mode
+ * @note Bluetooth Core Specification does NOT assign fixed numeric values for these channel modes.
+ * The numeric values assigned in this enum are purely internal identifiers for this implementation,
+ * used only within the stack state management, and are not transmitted over the air.
+ */
+enum class l2cap_channel_mode : uint8_t
+{
+    /// Basic L2CAP Mode.
+    /// Valid for BR/EDR and some LE fixed channels
+    basic_mode = 0x00,
+
+    /// Flow Control Mode, BR/EDR only
+    flow_control_mode = 0x01,
+
+    /// Retransmission Mode, BR/EDR only
+    retransmission_mode = 0x02,
+
+    /// Enhanced Retransmission Mode, BR/EDR only
+    enhanced_retransmission_mode = 0x03,
+
+    /// Streaming Mode, BR/EDR only
+    streaming_mode = 0x04,
+
+    /// LE Credit Based Flow Control Mode, LE only
+    le_credit_based_flow_control_mode = 0x05,
+
+    /// Enhanced Credit Based Flow Control Mode, BR/EDR and LE
+    enhanced_credit_based_flow_control_mode = 0x06,
+};
+
 struct channel_qos_config
 {
     qos_type m_qos_type; // for QoS option

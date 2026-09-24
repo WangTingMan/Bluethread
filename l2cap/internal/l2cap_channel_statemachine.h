@@ -441,6 +441,7 @@ private:
     uint16_t m_psm_value = 0x00;
     bool m_local_inited = false;
     l2cap_callbacks m_callbacks;
+    l2cap_channel_mode m_channel_mode = l2cap_channel_mode::basic_mode;
     std::shared_ptr<l2cap_signaling> m_signaling_channel;
     std::vector<channel_config_option> m_local_config_options;
 

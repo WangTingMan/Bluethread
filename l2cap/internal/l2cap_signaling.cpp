@@ -264,7 +264,8 @@ void l2cap_signaling::send_disconnect_request
     uint16_t a_src_cid
     )
 {
-    m_sig_header.set_identifier( ++m_indentifier );
+    uint8_t identifier = ++m_indentifier;
+    m_sig_header.set_identifier( identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_disconnection_req );
     m_sig_header.set_sdu_length( 4 );
 
@@ -278,6 +279,14 @@ void l2cap_signaling::send_disconnect_request
     buffer_size += writer.wrote_size();
     m_sig_header.to_raw_buffer( write_buffer, sizeof( write_buffer ) - buffer_size );
     buffer_size += m_sig_header.header_size();
+
+    auto request = std::make_shared<l2cap_disconnect_request>();
+    request->m_identifier = identifier;
+    request->m_destination_cid = a_dest_cid;
+    request->m_source_cid = a_src_cid;
+    request->m_connection_handle = m_sig_header.get_acl_handle();
+    request->set_sender( m_remote_address );
+    queue_signaling_request( request );
 
     send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
 
@@ -416,7 +425,8 @@ void l2cap_signaling::query_information( l2cap_channel_information_type a_info_t
     stream_writer writer( write_buffer, 100 );
     uint16_t buffer_size = 0;
 
-    m_sig_header.set_identifier( ++m_indentifier );
+    uint8_t identifier = ++m_indentifier;
+    m_sig_header.set_identifier( identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_information_req );
 
     m_sig_header.set_sdu_length( sizeof( a_info_type ) );
@@ -430,6 +440,11 @@ void l2cap_signaling::query_information( l2cap_channel_information_type a_info_t
     {
         LogUtilInfo() << "query informatin type: " << a_info_type;
         send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
+
+        auto request = std::make_shared<l2cap_information_request>();
+        request->m_identifier = identifier;
+        request->m_infor_type = a_info_type;
+        queue_signaling_request( request );
     }
 }
 

@@ -119,7 +119,7 @@ void l2cap_signaling::send_connection_request
     uint16_t a_source_id
     )
 {
-    uint8_t signaling_identifier = ++m_indentifier;
+    uint8_t signaling_identifier = get_identifier();
     m_sig_header.set_identifier( signaling_identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_connection_req );
     m_sig_header.set_sdu_length( 4 );
@@ -190,7 +190,7 @@ uint8_t l2cap_signaling::send_config_request
         return 0x00;
     }
 
-    uint8_t identifier = ++m_indentifier;
+    uint8_t identifier = get_identifier();
     m_sig_header.set_identifier( identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_configuration_req );
 
@@ -264,7 +264,7 @@ void l2cap_signaling::send_disconnect_request
     uint16_t a_src_cid
     )
 {
-    uint8_t identifier = ++m_indentifier;
+    uint8_t identifier = get_identifier();
     m_sig_header.set_identifier( identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_disconnection_req );
     m_sig_header.set_sdu_length( 4 );
@@ -425,7 +425,7 @@ void l2cap_signaling::query_information( l2cap_channel_information_type a_info_t
     stream_writer writer( write_buffer, 100 );
     uint16_t buffer_size = 0;
 
-    uint8_t identifier = ++m_indentifier;
+    uint8_t identifier = get_identifier();
     m_sig_header.set_identifier( identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_information_req );
 

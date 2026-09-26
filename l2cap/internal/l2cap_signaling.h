@@ -189,7 +189,7 @@ public:
         uint16_t a_size = 0
         )
     {
-        send_echo( signaling_code::l2cap_echo_req, ++m_indentifier, a_data, a_size );
+        send_echo( signaling_code::l2cap_echo_req, get_identifier(), a_data, a_size );
     }
 
     void send_echo_response
@@ -436,10 +436,20 @@ private:
 
     void queue_signaling_request( std::shared_ptr<signaling_channel_packet> a_request );
 
+    uint8_t get_identifier()
+    {
+        uint8_t identifier = ++m_identifier;
+        if( m_identifier == 0xFF )
+        {
+            m_identifier = 0x00;
+        }
+        return identifier;
+    }
+
     using sig_packtets = std::vector<command_sent_control_block>;
 
     signaling_header                m_sig_header;
-    uint8_t                         m_indentifier = 0x00;
+    uint8_t                         m_identifier = 0x00;
     uint16_t                        m_remote_connectionless_mtu = 0x0000;
     uint16_t                        m_remote_signaling_mtu = 4096u;
     l2cap_ext_features              m_remote_ext_features;

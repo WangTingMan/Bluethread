@@ -144,24 +144,7 @@ void l2cap_signaling::send_connection_request
     command->m_acl_handle = m_sig_header.get_acl_handle();
     command->m_signaling_code = signaling_code::l2cap_connection_req;
     command->m_identifier = signaling_identifier;
-    comand_sent_control_block cmd_cb;
-    cmd_cb.m_sent_command = command;
-    auto _module = framework::framework_manager::get_instance()
-        .get_module_manager().get_module( framework::abstract_module::s_timer_module_name );
-    auto _timer_module = std::static_pointer_cast<framework::timer_module>(_module);
-    auto thiz = shared_from_this();
-    auto timer_id = _timer_module->register_once_timer
-        (
-        [thiz, command]( uint32_t /*a_id*/, std::string /*a_name*/ )
-        {
-            thiz->handle_command_wait_rsp_timeout( command );
-        },
-        std::chrono::milliseconds( s_command_response_timeout ),
-        "",
-        l2cap_module::s_l2cap_module_name
-        );
-    cmd_cb.m_registered_time_out_timer_id = timer_id;
-    m_commands_sent.push_back( std::move( cmd_cb ) );
+    queue_signaling_request( command );
 }
 
 void l2cap_signaling::send_connection_response
@@ -227,6 +210,13 @@ uint8_t l2cap_signaling::send_config_request
     buffer_size += writer.wrote_size();
     m_sig_header.to_raw_buffer( write_buffer, sizeof( write_buffer ) - buffer_size );
     buffer_size += m_sig_header.header_size();
+
+    std::shared_ptr<l2cap_config_request> request_sent;
+    request_sent = std::make_shared<l2cap_config_request>();
+    request_sent->m_options = a_options;
+    request_sent->m_identifier = identifier;
+    request_sent->m_destionation_cid = a_remote_cid;
+    queue_signaling_request( request_sent );
 
     // TODO: Handle remote ConfigReject with MTU exceeded reason.
     // If peer rejects configuration request because our requested MTU exceeds peer capability,
@@ -359,10 +349,10 @@ void l2cap_signaling::send_echo
     send_completed_acl_packet( std::vector<uint8_t>( write_buffer, write_buffer + buffer_size ) );
 }
 
-void l2cap_signaling::handle_command_wait_rsp_timeout( std::shared_ptr<signaling_channel_packet> a_sent_command )
+void l2cap_signaling::handle_command_wait_rsp_timeout( uint8_t a_identifier )
 {
-    LogUtilError() << "Remote device did not send response for command: "
-        << a_sent_command->m_signaling_code <<", device: " << a_sent_command->get_receiver();
+    LogUtilError() << "Remote device did not send response for command identifier: "
+        << (uint32_t)a_identifier;
 
     // TODO: we need re-send this command again or disconnect the ACL connection.
 }
@@ -373,6 +363,44 @@ void l2cap_signaling::cancel_timer( uint32_t a_timer_id )
         .get_module_manager().get_module( framework::abstract_module::s_timer_module_name );
     auto _timer_module = std::static_pointer_cast<framework::timer_module>(_module);
     _timer_module->undregister_timer( a_timer_id );
+}
+
+void l2cap_signaling::queue_signaling_request( std::shared_ptr<signaling_channel_packet> a_request )
+{
+    if( a_request->m_identifier == 0 )
+    {
+        LogUtilError() << "identifier is zero, ignore this register timer";
+        return;
+    }
+
+    for( auto& ele : m_commands_sent )
+    {
+        if( ele.m_sent_command->m_identifier == a_request->m_identifier )
+        {
+            LogUtilError() << "register agian with same identifier!";
+            return;
+        }
+    }
+
+    uint8_t identifier = a_request->m_identifier;
+    command_sent_control_block cmd_cb;
+    cmd_cb.m_sent_command = a_request;
+    auto _module = framework::framework_manager::get_instance()
+        .get_module_manager().get_module( framework::abstract_module::s_timer_module_name );
+    auto _timer_module = std::static_pointer_cast<framework::timer_module>( _module );
+    auto thiz = shared_from_this();
+    auto timer_id = _timer_module->register_once_timer
+        (
+            [thiz, identifier]( uint32_t /*a_id*/, std::string /*a_name*/ )
+            {
+                thiz->handle_command_wait_rsp_timeout( identifier );
+            },
+            std::chrono::milliseconds( s_command_response_timeout ),
+            "",
+            l2cap_module::s_l2cap_module_name
+        );
+    cmd_cb.m_registered_time_out_timer_id = timer_id;
+    m_commands_sent.push_back( std::move( cmd_cb ) );
 }
 
 void l2cap_signaling::query_information( l2cap_channel_information_type a_info_type )
@@ -422,6 +450,7 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
     uint32_t available_size = raw_hci.size() - s_l2cap_signaling_offset;
     uint32_t parsed_size = 0;
 
+    /* An L2CAP packet may contain multiple commands */
     while( available_size > 0 )
     {
         if( available_size < 1 )

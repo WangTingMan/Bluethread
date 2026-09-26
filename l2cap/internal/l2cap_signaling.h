@@ -32,7 +32,7 @@ namespace bluetooth
 
 using sig_pkt_handler = std::function<void( std::shared_ptr<signaling_channel_packet> const& )>;
 
-struct comand_sent_control_block
+struct command_sent_control_block
 {
     std::shared_ptr<signaling_channel_packet> m_sent_command;
     uint32_t m_registered_time_out_timer_id = 0;
@@ -430,11 +430,13 @@ private:
      * We sent a command to remote device, but remote device did not response us in time.
      * We need handle this case.
      */
-    void handle_command_wait_rsp_timeout( std::shared_ptr<signaling_channel_packet> a_sent_command );
+    void handle_command_wait_rsp_timeout( uint8_t a_identifier );
 
     void cancel_timer( uint32_t a_timer_id );
 
-    using sig_packtets = std::vector<comand_sent_control_block>;
+    void queue_signaling_request( std::shared_ptr<signaling_channel_packet> a_request );
+
+    using sig_packtets = std::vector<command_sent_control_block>;
 
     signaling_header                m_sig_header;
     uint8_t                         m_indentifier = 0x00;

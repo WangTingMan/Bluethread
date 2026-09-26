@@ -1534,13 +1534,6 @@ void l2cap_channel_statemachine::cache_continue_config_options( std::vector<chan
 
 void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr<l2cap_config_request> const& a_request )
 {
-    auto& callbacks = m_callbacks;
-    if( !callbacks.m_coming_config_callback )
-    {
-        LogUtilError() << "Not set configuration callback.";
-        return;
-    }
-
     a_request->m_source_cid = m_remote_channel_id;
 
     bool need_reject = false;
@@ -1606,16 +1599,6 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
                 need_reject = true;
                 break;
             }
-
-            if( m_mtu_is_default_value )
-            {
-                m_mtu = option_.m_option.m_mtu;
-                m_mtu_is_default_value = false;
-            }
-            else
-            {
-                m_mtu = m_mtu > option_.m_option.m_mtu ? option_.m_option.m_mtu : m_mtu;
-            }
             break;
         default:
             break;
@@ -1664,6 +1647,13 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
         a_request->m_options = std::move( m_cached_incoming_continue_configs );
     }
 
+    auto& callbacks = m_callbacks;
+    if( !callbacks.m_coming_config_callback )
+    {
+        LogUtilError() << "Not set configuration callback.";
+        return;
+    }
+
     if( !callbacks.m_handle_module.empty() )
     {
         std::shared_ptr<executable_task> task;
@@ -1703,16 +1693,6 @@ void l2cap_channel_statemachine::config_local_channel_req_internal
             {
                 option_.m_option.m_mtu = 23;
                 break;
-            }
-
-            if( m_mtu_is_default_value )
-            {
-                m_mtu = option_.m_option.m_mtu;
-                m_mtu_is_default_value = false;
-            }
-            else
-            {
-                m_mtu = m_mtu > option_.m_option.m_mtu ? option_.m_option.m_mtu : m_mtu;
             }
             break;
         default:

@@ -460,12 +460,13 @@ private:
     uint16_t m_local_channel_id = 0x00;
     uint16_t m_remote_channel_id = 0x00;
     uint16_t m_psm_value = 0x00;
-    uint16_t m_mtu = 672u; /* The default value is 672 octets: from core specific, L2CAP, section 5.1.*/
-    bool m_mtu_is_default_value = true;
     bool m_local_inited = false;
     l2cap_callbacks m_callbacks;
     l2cap_channel_mode m_channel_mode = l2cap_channel_mode::basic_mode;
     std::shared_ptr<l2cap_signaling> m_signaling_channel;
+
+    std::vector<channel_config_option> m_remote_configs;
+    std::vector<channel_config_option> m_local_configs;
 
     /**
      * @brief Caches partial configuration options from L2CAP CONFIGURATION_REQ with continuation flag set.

@@ -94,6 +94,16 @@ void l2cap_signaling::send_reject_rsp
     uint16_t a_ext_data_size
     )
 {
+    if( has_cached_received_request( a_identifier ) )
+    {
+        remove_cached_received_request( a_identifier );
+    }
+    else
+    {
+        LogUtilError( "we may already reply request with identifier %d", a_identifier );
+        return;
+    }
+
     m_sig_header.set_identifier( a_identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_command_reject_rsp );
     m_sig_header.set_sdu_length( 2 + a_ext_data_size );
@@ -156,6 +166,16 @@ void l2cap_signaling::send_connection_response
     connection_req_refused_status a_refused_status
     )
 {
+    if( has_cached_received_request( a_identifier ) )
+    {
+        remove_cached_received_request( a_identifier );
+    }
+    else
+    {
+        LogUtilError( "we may already reply request with identifier %d", a_identifier );
+        return;
+    }
+
     m_sig_header.set_identifier( a_identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_connection_rsp );
     m_sig_header.set_sdu_length( 8 );
@@ -235,6 +255,15 @@ void l2cap_signaling::send_config_response
     std::vector<channel_config_option> const& a_options
     )
 {
+    if( has_cached_received_request( a_identifier ) )
+    {
+        remove_cached_received_request( a_identifier );
+    }
+    else
+    {
+        LogUtilError( "we may already reply request with identifier %d", a_identifier );
+        return;
+    }
     m_sig_header.set_identifier( a_identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_configuration_rsp );
 
@@ -304,12 +333,22 @@ void l2cap_signaling::send_disconnect_request
 
 void l2cap_signaling::send_disconnect_response
     (
-    uint8_t a_identifider,
+    uint8_t a_identifier,
     uint16_t a_dest_cid,
     uint16_t a_src_cid
     )
 {
-    m_sig_header.set_identifier( a_identifider );
+    if( has_cached_received_request( a_identifier ) )
+    {
+        remove_cached_received_request( a_identifier );
+    }
+    else
+    {
+        LogUtilError( "we may already reply request with identifier %d", a_identifier );
+        return;
+    }
+
+    m_sig_header.set_identifier( a_identifier );
     m_sig_header.set_signaling_code( signaling_code::l2cap_disconnection_rsp);
     m_sig_header.set_sdu_length( 4 );
 
@@ -1108,6 +1147,7 @@ uint16_t l2cap_signaling::handle_connection_request
     request->set_receiver( the_controller->get_address() );
     request->set_sender( m_remote_address );
 
+    cached_received_request( request );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( request );
@@ -1327,6 +1367,7 @@ uint16_t l2cap_signaling::handle_config_request
         .get_detail_information<controller>( controller::s_information_name );
     request->set_receiver( the_controller->get_address() );
 
+    cached_received_request( request );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( request );
@@ -1512,6 +1553,7 @@ uint16_t l2cap_signaling::handle_disconnect_request( uint8_t const* a_raw_sig, u
         .get_detail_information<controller>( controller::s_information_name );
     request->set_receiver( the_controller->get_address() );
 
+    cached_received_request( request );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( request );
@@ -1678,6 +1720,7 @@ uint16_t l2cap_signaling::handle_connection_parameter_update_request
         << ", latency=" << param_req->m_latency
         << ", timeout=" << param_req->m_timerout_timeout;
 
+    cached_received_request( param_req );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( param_req );
@@ -1823,6 +1866,7 @@ uint16_t l2cap_signaling::handle_le_credit_based_connection_request
         .get_detail_information<controller>( controller::s_information_name );
     req->set_receiver( the_controller->get_address() );
 
+    cached_received_request( req );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( req );
@@ -2088,6 +2132,7 @@ uint16_t l2cap_signaling::handle_credit_based_connection_request
         .get_detail_information<controller>( controller::s_information_name );
     req->set_receiver( the_controller->get_address() );
 
+    cached_received_request( req );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( req );
@@ -2326,6 +2371,7 @@ uint16_t l2cap_signaling::handle_credit_based_reconfig_request
         .get_detail_information<controller>( controller::s_information_name );
     req->set_receiver( the_controller->get_address() );
 
+    cached_received_request( req );
     if( m_sig_pkt_handler )
     {
         m_sig_pkt_handler( req );

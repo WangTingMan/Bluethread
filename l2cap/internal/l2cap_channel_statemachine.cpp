@@ -1351,6 +1351,67 @@ l2cap_channel_statemachine::l2cap_channel_statemachine()
     state_ = std::make_shared<l2cap_channel_wait_disconnect_state>( *this,
         static_cast<uint32_t>( l2cap_channel_state_type::wait_disconnect ) );
     add_state( state_ );
+
+    set_default_config();
+}
+
+void l2cap_channel_statemachine::set_default_config()
+{
+    channel_config_option option;
+
+    option.m_type = channel_config_option_type::mtu;
+    /*---------------------------------------------------------------------------
+     * L2CAP_DEFAULT_MTU constant
+     *
+     *     Defines the MTU size assumed for devices that do not specify an MTU
+     *     size explicitly. This value is defined by the Bluetooth
+     *     specification as 672 bytes.
+     */
+    option.m_option.m_mtu = 672u;
+    m_local_configs.push_back( option );
+
+    option.m_type = channel_config_option_type::flush_timeout;
+    option.m_option.m_flush_timeout = 0xFFFF;
+    m_local_configs.push_back( option );
+
+    option.m_type = channel_config_option_type::qos;
+    option.m_option.m_qos.m_qos_type = qos_type::best_effort;
+    option.m_option.m_qos.m_token_rate = 0x0u;
+    option.m_option.m_qos.m_token_bucket_size = 0x0u;
+    option.m_option.m_qos.m_peak_bandwidth = 0x0u;
+    option.m_option.m_qos.m_latency = 0xFFFFFFFF;
+    option.m_option.m_qos.m_delay_variation = 0xFFFFFFFF;
+    m_local_configs.push_back( option );
+
+    option.m_type = channel_config_option_type::retransmission_flow_control;
+    option.m_option.m_flow_control_retransmission.m_mode = retransmission_flow_mode_type::base;
+    option.m_option.m_flow_control_retransmission.m_tx_windows_size = 6u; /* There is no default value for this in spec*/
+    /**
+     * @brief FCR(Retransmission and Flow Control) option parameters.
+     *
+     * These values (max_transmit, retransmission_timeout, monitor_timeout, max_pdu_size)
+     * are implementation-specific preset values selected by this stack.
+     * Bluetooth Core Specification does NOT define mandatory default values for these fields.
+     *
+     * Selected preset values:
+     * max_transmit = 1,
+     * retransmission_timeout = 100,
+     * monitor_timeout = 100,
+     * max_pdu_size = 0xFF.
+     *
+     * @note Only valid when negotiating to ERTM / Retransmission / Flow Control mode.
+     */
+    option.m_option.m_flow_control_retransmission.m_max_transmit = 1;
+    option.m_option.m_flow_control_retransmission.m_retransmission_timeout = 100;
+    option.m_option.m_flow_control_retransmission.m_monitor_timeout = 100;
+    option.m_option.m_flow_control_retransmission.m_max_pdu_size = 0xFF;
+    m_local_configs.push_back( option );
+
+    option.m_type = channel_config_option_type::fcs;
+    option.m_option.m_fcs = 0x01;
+    m_local_configs.push_back( option );
+
+    m_remote_configs = m_local_configs;
 }
 
 void l2cap_channel_statemachine::clear()
@@ -1674,6 +1735,7 @@ void l2cap_channel_statemachine::config_local_channel_req_internal
     l2cap_channel_base_state* a_current_state
     )
 {
+    uint16_t option_count = a_request->m_options.size();
     for( auto& option_ : a_request->m_options )
     {
         switch( option_.m_type )

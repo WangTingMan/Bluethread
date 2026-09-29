@@ -421,6 +421,8 @@ public:
 
 private:
 
+    void set_default_config();
+
     void clear();
 
     void send_completed_acl_packet( std::shared_ptr<hci_data> const& a_hci_data );

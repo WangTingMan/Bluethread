@@ -434,6 +434,17 @@ private:
 
     void cancel_timer( uint32_t a_timer_id );
 
+    /**
+     * @brief Enqueue L2CAP signaling request packet
+     *
+     * Cache the sent signaling command and start a timeout timer to monitor peer response.
+     * Match incoming response packet by signaling identifier.
+     * If response is received before timeout, cancel timer and process response.
+     * If timer expires, trigger timeout handling routine.
+     *
+     * @param a_request Shared pointer of L2CAP signaling packet to send
+     * @note Validate identifier, reject duplicate registration with same identifier
+     */
     void queue_signaling_request( std::shared_ptr<signaling_channel_packet> a_request );
 
     uint8_t get_identifier()
@@ -446,6 +457,55 @@ private:
         return identifier;
     }
 
+    /**
+     * @brief Cache received L2CAP signaling request from remote peer
+     *
+     * Store incoming L2CAP request signaling packet from the peer.
+     * Before sending out the corresponding response, use the signaling identifier
+     * to check whether this request has already been received and cached,
+     * for duplicate request detection.
+     *
+     * @param a_request Shared pointer to the received L2CAP signaling request packet
+     * @note Matching is performed via the L2CAP signaling Identifier field
+     */
+    void cached_received_request( std::shared_ptr<signaling_channel_packet> a_request )
+    {
+        command_sent_control_block cb;
+        cb.m_sent_command = a_request;
+        m_request_received.push_back( cb );
+        if( m_request_received.size() > 5 )
+        {
+            LogUtilError() << "To many cached received signaling request!";
+        }
+    }
+
+    bool has_cached_received_request( uint8_t a_identifier )
+    {
+        for( auto& req : m_request_received )
+        {
+            if( req.m_sent_command->m_identifier == a_identifier )
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void remove_cached_received_request( uint8_t a_idendifier )
+    {
+        for( auto it = m_request_received.begin(); it != m_request_received.end(); )
+        {
+            if( it->m_sent_command->m_identifier == a_idendifier )
+            {
+                it = m_request_received.erase( it );
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
     using sig_packtets = std::vector<command_sent_control_block>;
 
     signaling_header                m_sig_header;
@@ -456,6 +516,8 @@ private:
     sig_pkt_handler                 m_sig_pkt_handler;
     sig_packtets                    m_commands_sent; //!< All the command signaling packets we sent.
                                                      //!< Will delete it once we received correponding response.
+    sig_packtets                    m_request_received; //!< All the request signaling packet we receive,
+                                                        //!< we need send response for them.
     bluetooth_address               m_remote_address;
     acl_type                        m_acl_type = acl_type::invalid_type;
     std::function<void(uint16_t, l2cap_channel_information_type)> m_info_callback;

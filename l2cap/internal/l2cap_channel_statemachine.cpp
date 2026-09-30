@@ -28,6 +28,8 @@
 #include "framework/timer_module.h"
 
 static constexpr std::chrono::milliseconds s_upper_layer_confirm_time_out( 10000 );
+static constexpr uint16_t s_edr_channel_min_mtu = 48u;
+static constexpr uint16_t s_le_channel_min_mtu = 23u;
 
 namespace bluetooth
 {
@@ -1640,45 +1642,6 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
         return;
     }
 
-    for( auto& option_ : a_request->m_options )
-    {
-        switch( option_.m_type )
-        {
-        case channel_config_option_type::mtu:
-            if( option_.m_option.m_mtu < 48 &&
-                m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
-                )
-            {
-                need_reject = true;
-                break;
-            }
-
-            if( option_.m_option.m_mtu < 23 &&
-                m_signaling_channel->get_acl_type() == acl_type::le_acl
-                )
-            {
-                need_reject = true;
-                break;
-            }
-            break;
-        default:
-            break;
-        }
-
-        if( need_reject )
-        {
-            break;
-        }
-    }
-
-    if( need_reject )
-    {
-        LogUtilError() << "Parameter value unacceptable.";
-        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id, 0x00,
-            channel_config_result::unacceptable_parameters_failed, a_request->m_options );
-        return;
-    }
-
     if( a_request->m_continue_flag )
     {
         /**
@@ -1708,6 +1671,119 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
         a_request->m_options = std::move( m_cached_incoming_continue_configs );
     }
 
+    std::vector<channel_config_option> rejected_options;
+    std::vector<channel_config_option> accepted_options;
+    std::vector<channel_config_option> suggested_options;
+    channel_config_result result_code = channel_config_result::success;
+    for( auto& option_ : a_request->m_options )
+    {
+        switch( option_.m_type )
+        {
+        case channel_config_option_type::mtu:
+            if( option_.m_option.m_mtu < s_edr_channel_min_mtu &&
+                m_signaling_channel->get_acl_type() == acl_type::br_edr_acl
+                )
+            {
+                rejected_options.push_back( option_ );
+                rejected_options.back().m_option.m_mtu = s_edr_channel_min_mtu;
+                result_code = channel_config_result::unacceptable_parameters_failed;
+                break;
+            }
+            /**
+             * LE channel does not support configuration, so need not handle this on LE channel.
+             */
+            accepted_options.push_back( option_ );
+            break;
+        case channel_config_option_type::flush_timeout:
+            if( a_request->m_remote_edr_ext_flow_support )
+            {
+                /*This option shall not be used if the Extended Flow Specification is used.*/
+                rejected_options.push_back( option_ );
+                result_code = channel_config_result::rejected_failed;
+                break;
+            }
+            accepted_options.push_back( option_ );
+            /**
+             * The flush timeout value carried in the remote CONFIG_REQ is only a suggested value.
+             * Our preferred flush timeout parameter will be advertised within our CONFIG_RSP response.
+             */
+            suggested_options.push_back( option_ );
+            suggested_options.back().m_option.m_flush_timeout = m_prefered_rx_flush_timeout;
+            break;
+        case channel_config_option_type::qos:
+            if( a_request->m_remote_edr_ext_flow_support )
+            {
+                /*This option shall not be used if the Extended Flow Specification is used.*/
+                rejected_options.push_back( option_ );
+                result_code = channel_config_result::rejected_failed;
+                break;
+            }
+            {
+                /** Currently we do not support gurant QOS */
+                auto type = option_.m_option.m_qos.m_qos_type;
+                if( type == qos_type::no_traffic || type == qos_type::best_effort )
+                {
+                    accepted_options.push_back( option_ );
+                    break;;
+                }
+
+                rejected_options.push_back( option_ );
+                auto& back_ = rejected_options.back();
+                back_.m_option.m_qos.m_token_rate = 0xFFFFFFFF;
+                back_.m_option.m_qos.m_token_bucket_size = 0xFFFFFFFF;
+                back_.m_option.m_qos.m_peak_bandwidth = 0xFFFFFFFF;
+                back_.m_option.m_qos.m_latency = 0xFFFFFFFF;
+                back_.m_option.m_qos.m_delay_variation = 0xFFFFFFFF;
+            }
+            break;
+        case channel_config_option_type::retransmission_flow_control:
+        {
+            channel_config_option suggested_option;
+            auto result_ = process_incoming_fcr_request( option_, suggested_option );
+            if( result_ == channel_config_result::success )
+            {
+                accepted_options.push_back( option_ );
+            }
+            else
+            {
+                suggested_options.push_back( suggested_option );
+                rejected_options.push_back( option_ );
+                result_code = result_;
+            }
+        }
+            break;
+        default:
+            break;
+        }
+    }
+
+    merge_config_options( accepted_options, true );
+    if( rejected_options.size() > 0 )
+    {
+        if( result_code == channel_config_result::success )
+        {
+            result_code = channel_config_result::rejected_failed;
+        }
+        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id,
+            0x00, result_code, rejected_options );
+        LogUtilError() << "rejected configuration request.";
+        return;
+    }
+
+    if( accepted_options.size() == a_request->m_options.size() )
+    {
+        if( result_code != channel_config_result::success )
+        {
+            result_code = channel_config_result::success;
+            LogUtilWarning() << "should been success!";
+        }
+
+        LogUtilDebug() << "we can send accept response to remote device now.";
+        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id,
+            0x00, result_code, rejected_options );
+        return;
+    }
+
     auto& callbacks = m_callbacks;
     if( !callbacks.m_coming_config_callback )
     {
@@ -1727,6 +1803,77 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
     {
         callbacks.m_coming_config_callback( a_request );
     }
+}
+
+channel_config_result l2cap_channel_statemachine::process_incoming_fcr_request
+    (
+    channel_config_option const& a_fcr_option,
+    channel_config_option&       a_suggestion
+    )
+{
+    channel_config_result result = channel_config_result::success;
+
+    bool remote_ertm_supported = m_signaling_channel->remote_support(
+        l2cap_ext_feature_flag::enhanced_retransmission_mode );
+    bool remote_stream_supported = m_signaling_channel->remote_support(
+        l2cap_ext_feature_flag::streaming_mode );
+    channel_flow_control_retransmission_config const& option_ = a_fcr_option.m_option.m_flow_control_retransmission;
+    switch( option_.m_mode )
+    {
+    case retransmission_flow_mode_type::base:
+        /* we always accept base mode request now...*/
+        m_channel_mode = l2cap_channel_mode::basic_mode;
+        return result;
+    case retransmission_flow_mode_type::enhanced_retransmission:
+        if( !remote_ertm_supported )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        if( option_.m_tx_windows_size > 63 || option_.m_tx_windows_size < 1 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        if( option_.m_retransmission_timeout < 100 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        if( option_.m_monitor_timeout < 100 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        break;
+    case retransmission_flow_mode_type::flow_control:
+        if( option_.m_tx_windows_size > 32 || option_.m_tx_windows_size < 1 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        break;
+    case retransmission_flow_mode_type::retransmission:
+        if( option_.m_tx_windows_size > 32 || option_.m_tx_windows_size < 1 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        if( option_.m_max_transmit < 1 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        if( option_.m_monitor_timeout < 100 )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        break;
+    case retransmission_flow_mode_type::streaming:
+        if( !remote_stream_supported )
+        {
+            return channel_config_result::unacceptable_parameters_failed;
+        }
+        break;
+    default:
+
+        return channel_config_result::unknown_options_failed;
+    }
+
+    return result;
 }
 
 void l2cap_channel_statemachine::config_local_channel_req_internal
@@ -1770,5 +1917,31 @@ void l2cap_channel_statemachine::config_local_channel_req_internal
     a_current_state->transition_to_state( l2cap_channel_state_type::wait_config_req_rsp );
 }
 
+void l2cap_channel_statemachine::merge_config_options
+    (
+    std::vector<channel_config_option> options,
+    bool a_is_remote
+    )
+{
+    std::vector<channel_config_option>* target_option = nullptr;
+    target_option = a_is_remote ? &m_remote_configs : &m_local_configs;
+
+    for( auto& option : *target_option )
+    {
+        for( auto it = options.begin(); it != options.end(); )
+        {
+            if( it->m_type == option.m_type )
+            {
+                option = *it;
+                it = options.erase( it );
+                break;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
 }
 
+}

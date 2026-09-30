@@ -447,6 +447,31 @@ private:
     void handle_config_request_internal( std::shared_ptr<l2cap_config_request> const& a_request );
 
     /**
+     * @brief Process incoming Retransmission and Flow Control(FCR) configuration option from peer in L2CAP CONFIG_REQ
+     *
+     * Handle L2CAP Flow Control & Retransmission(FCR) option negotiation received from remote peer.
+     * This function evaluates the requested link mode and associated parameters(MPS, Rx Window, MaxTransmit etc.)
+     * carried in a_fcr_option.
+     *
+     * @param[in]  a_fcr_option  The raw FCR configuration option received from peer (requested parameters)
+     * @param[out] a_suggestion  If the request is rejected, this output argument holds our preferred FCR
+     *                           option values to propose back to peer in CONFIG_RSP.
+     *                           When request is accepted, the content of a_suggestion is unused.
+     *
+     * @note Negotiation logic: compare requested link mode against local capability.
+     *         - ERTM / Streaming mode requires validation of MPS, receive window and max retransmission count.
+     *         - If peer requests a higher link mode than we support, fill our supported mode into a_suggestion and return false.
+     *         - If requested mode is fully supported and parameters are valid, return true to accept.
+     * @note This function only handles FCR option, does not directly construct CONFIG_RSP packet.
+     *       The caller is responsible for assembling response packet and setting configuration result code.
+     */
+    channel_config_result process_incoming_fcr_request
+        (
+        channel_config_option const& a_fcr_option,
+        channel_config_option&       a_suggestion
+        );
+
+    /**
      * @brief Internal state machine handler for L2CAP Configuration Request
      * @warning Do NOT call this function directly from outside the state machine.
      * It will only be invoked when the channel has transitioned into a valid state
@@ -458,12 +483,33 @@ private:
         l2cap_channel_base_state *a_current_state
         );
 
+    void merge_config_options( std::vector<channel_config_option> options, bool a_is_remote );
+
     uint16_t m_connection_handle = 0x00;
     uint16_t m_local_channel_id = 0x00;
     uint16_t m_remote_channel_id = 0x00;
     uint16_t m_psm_value = 0x00;
+
+    /**
+     * @brief Preferred receive-side flush timeout (unit: 0.625ms per count)
+     *
+     * Upper layer protocols may configure this value.
+     * This parameter is advertised to the remote peer as the recommended flush timeout
+     * that the peer shall use when transmitting packets on this L2CAP channel.
+     *
+     * Example for AVDTP:
+     * If local AVDTP sink delay is 475 ms, convert to L2CAP flush timeout count:
+     * m_prefered_rx_flush_timeout = 475 * 1000 / 625 = 760.
+     * Each count represents 0.625 millisecond.
+     *
+     * @note This is only a recommendation sent in L2CAP CONFIG_RSP;
+     * the remote sender ultimately decides its actual flush timeout setting.
+     */
+    uint16_t m_prefered_rx_flush_timeout = 0xFFFF;
+
     bool m_local_inited = false;
     l2cap_callbacks m_callbacks;
+    l2cap_channel_mode m_prefered_mode = l2cap_channel_mode::basic_mode;
     l2cap_channel_mode m_channel_mode = l2cap_channel_mode::basic_mode;
     std::shared_ptr<l2cap_signaling> m_signaling_channel;
 

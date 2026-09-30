@@ -161,6 +161,7 @@ public:
         std::vector<channel_config_option> const& a_options
         );
 
+    /* TODO: the size of sent data shoule not bigger than remote signaling channel's MTU*/
     void send_config_response
         (
         uint8_t a_identifier,
@@ -232,6 +233,11 @@ public:
     acl_type get_acl_type()const
     {
         return m_acl_type;
+    }
+
+    bool remote_support( l2cap_ext_feature_flag a_flag )
+    {
+        return m_remote_ext_features.support_feature( a_flag );
     }
 
 private:

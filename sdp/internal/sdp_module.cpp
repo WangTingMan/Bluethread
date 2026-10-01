@@ -45,6 +45,7 @@ sdp_module::sdp_module()
 {
     set_name( s_sdp_module_name );
     set_module_type( abstract_module::module_type::sequence_executing );
+    m_sdp_manager = std::make_shared<sdp_manager>();
 }
 
 void sdp_module::initialize()

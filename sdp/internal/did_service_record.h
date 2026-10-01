@@ -15,37 +15,19 @@
  */
 
 #pragma once
-#include "sdp_common.h"
-
-#include <cstdint>
-#include <memory>
+#include "../sdp_common.h"
 
 namespace bluetooth
 {
 
-class sdp_service_record_db
+class did_service_record : public sdp_service_record
 {
 
 public:
 
-    sdp_service_record_db();
+    did_service_record();
 
-    std::shared_ptr<sdp_service_record> add_service_record( uint32_t a_service_record_handle );
 
-    void add_service_record( std::shared_ptr<sdp_service_record> a_service_record );
-
-    std::shared_ptr<sdp_service_record> find_service( uint32_t a_service_record_handle );
-
-    void clear()
-    {
-        m_local_services.clear();
-    }
-
-    std::list<std::shared_ptr<sdp_service_record>> find_matched_uuids_record( std::vector<uuid> const& a_uuids );
-
-private:
-
-    std::list<std::shared_ptr<sdp_service_record>> m_local_services;
 };
 
 }

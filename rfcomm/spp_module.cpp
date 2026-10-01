@@ -25,8 +25,9 @@
 #include "framework/framework_manager.h"
 #include "framework/executable_task.h"
 
-#include "../sdp/sdp_common.h"
-#include "../sdp/sdp_module.h"
+#include "sdp/sdp_common.h"
+#include "sdp/sdp_module.h"
+#include "sdp/sdp_task.h"
 
 static constexpr uint8_t s_spp_port_start = 10;
 
@@ -465,9 +466,8 @@ void spp_module::connect
 
     spp_conn->set_connection_status( connection_status::connecting );
 
-    std::shared_ptr<sdp_module::sdp_task> tsk;
-    tsk = std::make_shared<sdp_module::sdp_task>();
-    tsk->m_type = sdp_module::sdp_task_type::service_search_attribute;
+    std::shared_ptr<sdp_task_service_search_attribute> tsk;
+    tsk = std::make_shared<sdp_task_service_search_attribute>();
     tsk->m_remote_device = a_address;
     tsk->m_service_uuid.push_back( uuid::from_16bit( sdp_service_uuid::serial_port ) );
     tsk->set_source_module( get_name() );
@@ -580,9 +580,8 @@ void spp_module::create_new_spp
         paras
         );
 
-    std::shared_ptr<sdp_module::sdp_task> tsk;
-    tsk = std::make_shared<sdp_module::sdp_task>();
-    tsk->m_type = sdp_module::sdp_task_type::register_service_record;
+    std::shared_ptr<sdp_task_register_service_record> tsk;
+    tsk = std::make_shared<sdp_task_register_service_record>();
     tsk->m_callback_handle_module = get_name();
     tsk->m_registered_callback = std::bind( &spp_module::handle_service_record_registered, this, std::placeholders::_1,
         a_name, a_registered_callback, port_used, service_uuids );

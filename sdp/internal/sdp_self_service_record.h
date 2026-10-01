@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include "sdp_common.h"
+#include "../sdp_common.h"
 
 namespace bluetooth
 {

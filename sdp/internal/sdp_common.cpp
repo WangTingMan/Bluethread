@@ -14,7 +14,7 @@
  * Commercial closed-source licenses are available upon request.
  */
 
-#include "sdp_common.h"
+#include "../sdp_common.h"
 #include "endian_convert.h"
 
 #include "framework/log_util.h"

@@ -38,7 +38,7 @@ public:
         uint16_t a_remote_cid
         );
 
-    void handle_connection_state
+    void handle_connection_state_changed
         (
         bluetooth_address a_address,
         uint16_t a_local_cid,

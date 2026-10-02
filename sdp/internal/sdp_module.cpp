@@ -63,7 +63,7 @@ void sdp_module::initialize()
     l2cap_cbs.m_coming_config_callback =
         std::bind( &sdp_manager::handle_config_request, m_sdp_manager, std::placeholders::_1 );
     l2cap_cbs.m_channel_state_changed_callback =
-        std::bind( &sdp_manager::handle_connection_state, m_sdp_manager, std::placeholders::_1,
+        std::bind( &sdp_manager::handle_connection_state_changed, m_sdp_manager, std::placeholders::_1,
             std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5 );
     l2cap_cbs.m_channel_sdu_callback = std::bind( &sdp_manager::handle_sdu, m_sdp_manager, std::placeholders::_1 );
 

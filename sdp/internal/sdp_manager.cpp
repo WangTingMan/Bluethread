@@ -166,7 +166,7 @@ void sdp_manager::config_local_channel
     framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
-void sdp_manager::handle_connection_state
+void sdp_manager::handle_connection_state_changed
     (
     bluetooth_address a_address,
     uint16_t a_local_cid,

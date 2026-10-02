@@ -168,7 +168,10 @@ void l2cap_signaling::send_connection_response
 {
     if( has_cached_received_request( a_identifier ) )
     {
-        remove_cached_received_request( a_identifier );
+        if( connection_req_result::connection_pending != a_result )
+        {
+            remove_cached_received_request( a_identifier );
+        }
     }
     else
     {

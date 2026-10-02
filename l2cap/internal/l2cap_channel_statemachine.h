@@ -477,7 +477,7 @@ private:
      * It will only be invoked when the channel has transitioned into a valid state
      * ready to process outgoing ConfigRequest.
      */
-    void config_local_channel_req_internal
+    bool config_local_channel_req_internal
         (
         std::shared_ptr<l2cap_config_local_channel_request> const& a_request,
         l2cap_channel_base_state *a_current_state

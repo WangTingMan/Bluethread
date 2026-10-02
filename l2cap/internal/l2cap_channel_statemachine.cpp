@@ -485,6 +485,7 @@ bool l2cap_channel_wait_config_state::handle_event
         return false;
     }
 
+    bool status = false;
     switch( event_->m_type )
     {
     case l2cap_channel_event::event_type::request_configure_local:
@@ -500,7 +501,12 @@ bool l2cap_channel_wait_config_state::handle_event
             return false;
         }
 
-        get_statemachine().config_local_channel_req_internal( event_->m_local_channel_config_request, this );
+        status = get_statemachine().config_local_channel_req_internal( event_->m_local_channel_config_request, this );
+        if( status )
+        {
+            LogUtilInfo() << "Send channel configuration request to remote device done. translate to next state.";
+            transition_to_state( l2cap_channel_state_type::wait_config_req_rsp );
+        }
         break;
     case l2cap_channel_event::event_type::handle_signaling_pkt:
         handle_signaling_packet( event_->m_channel_pkt );
@@ -1597,6 +1603,11 @@ void l2cap_channel_statemachine::cache_continue_config_options( std::vector<chan
 
 void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr<l2cap_config_request> const& a_request )
 {
+    LogUtilDebug() << "handle_config_request_internal, continue_flag: " << static_cast<uint32_t>( a_request->m_continue_flag )
+        << ", remote_edr_ext_flow_support: " << static_cast<uint32_t>( a_request->m_remote_edr_ext_flow_support )
+        << ", is_truncted: " << static_cast<uint32_t>( a_request->m_is_truncted )
+        << ", current state: " << static_cast<uint32_t>( get_current_state_id() );
+
     a_request->m_source_cid = m_remote_channel_id;
 
     bool need_reject = false;
@@ -1779,8 +1790,7 @@ void l2cap_channel_statemachine::handle_config_request_internal( std::shared_ptr
         }
 
         LogUtilDebug() << "we can send accept response to remote device now.";
-        m_signaling_channel->send_config_response( a_request->m_identifier, m_remote_channel_id,
-            0x00, result_code, rejected_options );
+        accept_config_req( a_request );
         return;
     }
 
@@ -1876,7 +1886,7 @@ channel_config_result l2cap_channel_statemachine::process_incoming_fcr_request
     return result;
 }
 
-void l2cap_channel_statemachine::config_local_channel_req_internal
+bool l2cap_channel_statemachine::config_local_channel_req_internal
     (
     std::shared_ptr<l2cap_config_local_channel_request> const& a_request,
     l2cap_channel_base_state* a_current_state
@@ -1914,7 +1924,7 @@ void l2cap_channel_statemachine::config_local_channel_req_internal
         m_remote_channel_id,
         a_request->m_options
         );
-    a_current_state->transition_to_state( l2cap_channel_state_type::wait_config_req_rsp );
+    return true;
 }
 
 void l2cap_channel_statemachine::merge_config_options

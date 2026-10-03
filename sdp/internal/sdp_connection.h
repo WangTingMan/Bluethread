@@ -86,11 +86,49 @@ public:
         return m_config_remote_rsp_sent;
     }
 
+    void set_acl_handle
+        (
+        uint16_t a_acl_handle
+        )
+    {
+        m_acl_handle = a_acl_handle;
+    }
+
+    uint16_t get_acl_handle()const
+    {
+        return m_acl_handle;
+    }
+
+    void set_local_cid
+        (
+        uint16_t a_local_cid
+        )
+    {
+        m_local_cid = a_local_cid;
+    }
+
+    void set_remote_cid
+        (
+        uint16_t a_remote_cid
+        )
+    {
+        m_remote_cid = a_remote_cid;
+    }
+
+    bool match
+        (
+        uint16_t a_acl_handle
+        ) const
+    {
+        return ( m_acl_handle == a_acl_handle );
+    }
+
 public:
 
     bluetooth_address m_address;
     uint16_t m_local_cid = 0x00;
     uint16_t m_remote_cid = 0x00;
+    uint16_t m_acl_handle = 0x00;
 
 private:
 

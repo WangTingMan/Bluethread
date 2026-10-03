@@ -79,8 +79,14 @@ void sdp_header::parse_from_raw_data( uint8_t* a_buffer, uint32_t a_size )
     l2cap_header::parse_from_raw_data( a_buffer, a_size );
     uint8_t* p_offset = a_buffer + l2cap_header::header_size();
     m_pdu_id = static_cast< sdp_pdu_id >( p_offset[0] );
-    m_transaction_id = le_to_host16( p_offset + 1 );
-    m_parameter_length = le_to_host16( p_offset + 3 );
+
+    /**
+     * The Service Discovery protocol shall transfer multiple-byte fields in standard network
+     * byte order (big-endian), with more significant (high-order) bytes being transferred before
+     * less-significant (low-order) bytes.
+     */
+    m_transaction_id = be_to_host16( p_offset + 1 );
+    m_parameter_length = be_to_host16( p_offset + 3 );
 }
 
 }

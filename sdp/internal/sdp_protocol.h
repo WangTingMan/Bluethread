@@ -59,6 +59,11 @@ public:
      */
     void set_sdu_length( uint16_t a_length )override;
 
+    uint16_t get_parameters_length()const
+    {
+        return m_parameter_length;
+    }
+
     void to_raw_buffer( uint8_t* a_buffer, uint32_t a_size )override;
 
     uint16_t header_size()const override;
@@ -66,6 +71,11 @@ public:
     void set_pdu_id( sdp_pdu_id a_id )
     {
         m_pdu_id = a_id;
+    }
+
+    sdp_pdu_id get_pdu_id()const
+    {
+        return m_pdu_id;
     }
 
     void set_transcation_id( uint16_t a_transaction_id )

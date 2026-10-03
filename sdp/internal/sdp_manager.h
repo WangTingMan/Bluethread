@@ -63,16 +63,21 @@ public:
     void handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task );
 
     void send_packet
-    (
+        (
         std::shared_ptr<sdp_protocol_base> const& a_packet,
         bluetooth_address                           a_remote_address
-    );
+        );
 
-    void send_error_rsp( sdp_error_code a_code );
+    void send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code );
 
-    bool verify_received_packer( std::shared_ptr<hci_data> const& a_packet );
+    bool verify_received_packet( std::shared_ptr<hci_data> const& a_packet );
 
     std::shared_ptr<sdp_connection> find_connection( bluetooth_address const& a_address );
+
+    std::shared_ptr<sdp_connection> find_connection
+        (
+        uint16_t a_acl_handle
+        );
 
     void remove_connection( bluetooth_address const& a_address );
 

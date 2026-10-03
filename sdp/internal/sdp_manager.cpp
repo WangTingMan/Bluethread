@@ -62,6 +62,7 @@ void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request
             std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
             sdp_conn->m_address = address;
             sdp_conn->set_connection_status( connection_status::connecting );
+            sdp_conn->set_acl_handle( a_request->m_acl_handle );
             m_connections.push_back( sdp_conn );
             conn_ = sdp_conn;
         }
@@ -118,6 +119,7 @@ void sdp_manager::handle_config_request( std::shared_ptr<l2cap_config_request> c
         std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
         sdp_conn->m_address = address;
         sdp_conn->set_connection_status( connection_status::connecting );
+        sdp_conn->set_acl_handle( a_request->m_acl_handle );
         m_connections.push_back( sdp_conn );
         conn_ = sdp_conn;
     }
@@ -180,9 +182,22 @@ void sdp_manager::handle_connection_state_changed
     {
         if( a_state != l2cap_channel_state_type::close_state )
         {
-            sdp_connection_ = std::make_shared<sdp_connection>();
-            m_connections.push_back( sdp_connection_ );
-            sdp_connection_->m_address = a_address;
+            auto acl_db = framework_manager::get_instance().get_info_manager()
+                .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+            auto [acl_handle, has] = acl_db->get_handle( a_address );
+            if( has )
+            {
+                sdp_connection_ = std::make_shared<sdp_connection>();
+                sdp_connection_->m_address = a_address;
+                sdp_connection_->set_acl_handle( acl_handle );
+                sdp_connection_->set_local_cid( a_local_cid );
+                m_connections.push_back( sdp_connection_ );
+            }
+            else
+            {
+                LogUtilError() << "No acl handle for device: " << a_address.to_string();
+                return;
+            }
         }
         else
         {
@@ -190,8 +205,25 @@ void sdp_manager::handle_connection_state_changed
         }
     }
 
-    sdp_connection_->m_local_cid = a_local_cid;
-    sdp_connection_->m_remote_cid = a_remote_cid;
+    sdp_connection_->set_local_cid( a_local_cid );
+    sdp_connection_->set_remote_cid( a_remote_cid );
+    if( sdp_connection_->get_acl_handle() == 0x00 )
+    {
+        auto acl_db = framework_manager::get_instance().get_info_manager()
+            .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+        auto [acl_handle, has] = acl_db->get_handle( a_address );
+        if( has )
+        {
+            sdp_connection_->set_acl_handle( acl_handle );
+        }
+        else
+        {
+            LogUtilError() << "No acl handle for device: " << a_address.to_string();
+            remove_connection( a_address );
+            return;
+        }
+    }
+
     switch( a_state )
     {
     case bluetooth::l2cap_channel_state_type::close_state:
@@ -242,16 +274,30 @@ void sdp_manager::handle_connection_state_changed
 
 void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
 {
-    if( !verify_received_packer( a_sdu ) )
+    if( a_sdu->m_buffer.size() < m_sdp_header.l2cap_header::header_size() )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        LogUtilError() << "cannot parsing completed l2cap header, so ignore this packet";
         return;
     }
 
-    sdp_pdu_id pdu_id = sdp_pdu_id::sdp_error_rsp;
-    uint8_t* p_sdp_header = a_sdu->m_buffer.data() + m_sdp_header.l2cap_header::header_size();
-    pdu_id = static_cast<sdp_pdu_id>( p_sdp_header[0] );
+    l2cap_header _l2cap_header;
+    _l2cap_header.parse_from_raw_data( a_sdu->m_buffer.data(), a_sdu->m_buffer.size() );
+    auto sdp_con = find_connection( _l2cap_header.get_acl_handle() );
+    if( !sdp_con )
+    {
+        LogUtilError() << "No sdp connection control block for local cid: "
+            << _l2cap_header.get_channel_id()
+            << " acl handle: " << _l2cap_header.get_acl_handle();
+        return;
+    }
 
+    if( !verify_received_packet( a_sdu ) )
+    {
+        send_error_rsp( _l2cap_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+
+    sdp_pdu_id pdu_id = m_sdp_header.get_pdu_id();
     switch( pdu_id )
     {
     case bluetooth::sdp_pdu_id::sdp_error_rsp:
@@ -284,7 +330,7 @@ void sdp_manager::handle_service_search_request( std::shared_ptr<hci_data> const
     auto [attribute_value, ret] = sdp_data_element::parse_from( p_sdu, parameter_size );
     if( !ret )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -302,14 +348,14 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     bool ret = sdp_data_element::recognite_data_element( p_sdu, parameter_size, pattern_size );
     if( !ret )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
     auto [pattern, parse_ret] = sdp_data_element::parse_from( p_sdu, pattern_size );
     if( !pattern.can_as_elements() )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -317,14 +363,14 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     if( uuids.size() > 12 )
     {
         // This value's minmum value is 12. See sdp specification
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
     if( parameter_size < pattern_size + 2 )
     {
         // We need maximum attribute byte count here. But there is no more buffer to use.
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -332,7 +378,7 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     if( max_attribute_bytes_count < 0x0007 )
     {
         // This value's minmum value is 0x0007. See sdp specification
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -340,20 +386,20 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     ret = sdp_data_element::recognite_data_element( p_sdu + pattern_size + 2, parameter_size - pattern_size - 2, attribute_id_size );
     if( !ret )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
     auto [attribute_ids, parse_id_ret] = sdp_data_element::parse_from( p_sdu + pattern_size + 2, attribute_id_size );
     if( !attribute_ids.can_as_elements() )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
     if( !attribute_ids.can_as_elements() )
     {
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -380,14 +426,14 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
             continue;
         }
 
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
     if( parameter_size < pattern_size + 2 + attribute_id_size + 1 )
     {
         // We need continuation state here. But there is no more buffer to use.
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -395,7 +441,7 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     if( parameter_size < pattern_size + 2 + attribute_id_size + 1 + continue_size )
     {
         // We need continuation state here. But there is no more buffer to use.
-        send_error_rsp( sdp_error_code::invalid_syntax );
+        //send_error_rsp( sdp_error_code::invalid_syntax );
         return;
     }
 
@@ -576,20 +622,22 @@ void sdp_manager::send_packet
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 
-void sdp_manager::send_error_rsp( sdp_error_code a_code )
+void sdp_manager::send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code )
 {
 
 }
 
-bool sdp_manager::verify_received_packer( std::shared_ptr<hci_data> const& a_packet )
+bool sdp_manager::verify_received_packet( std::shared_ptr<hci_data> const& a_packet )
 {
     if( a_packet->m_buffer.size() < m_sdp_header.header_size() )
     {
         return false;
     }
 
-    uint16_t parameter_size = be_to_host16( a_packet->m_buffer.data() +
-        m_sdp_header.l2cap_header::header_size() + 3 );
+    m_sdp_header.parse_from_raw_data( a_packet->m_buffer.data(),
+        static_cast<uint32_t>( a_packet->m_buffer.size() ) );
+
+    uint16_t parameter_size = m_sdp_header.get_parameters_length();
 
     if( a_packet->m_buffer.size() < m_sdp_header.header_size() + parameter_size )
     {
@@ -604,6 +652,21 @@ std::shared_ptr<sdp_connection> sdp_manager::find_connection( bluetooth_address 
     for( auto& ele : m_connections )
     {
         if( ele->m_address == a_address )
+        {
+            return ele;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<sdp_connection> sdp_manager::find_connection
+    (
+    uint16_t a_acl_handle
+    )
+{
+    for( auto& ele : m_connections )
+    {
+        if( ele->match( a_acl_handle ) )
         {
             return ele;
         }

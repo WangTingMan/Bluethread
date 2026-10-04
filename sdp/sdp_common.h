@@ -256,6 +256,30 @@ public:
 
     bool can_as_elements()const;
 
+    void set_alternative_elements( std::vector<sdp_data_element> a_elements )
+    {
+        m_elemets = std::move( a_elements );
+        m_value_type = sdp_attribute_value_type::alternative_data_element;
+        prepare_raw_for_elements();
+    }
+
+    void add_alternative_element( sdp_data_element a_element )
+    {
+        m_value_type = sdp_attribute_value_type::alternative_data_element;
+        m_elemets.push_back( a_element );
+        prepare_raw_for_elements();
+    }
+
+    std::vector<sdp_data_element>const& get_alternative_elements()const
+    {
+        return m_elemets;
+    }
+
+    bool can_as_alternative_elements()const
+    {
+        return sdp_attribute_value_type::alternative_data_element == m_value_type;
+    }
+
     /**
      * If the detail type is elements, then use this function to extract all the
      * uuids from these elements.

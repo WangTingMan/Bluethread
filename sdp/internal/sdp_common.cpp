@@ -527,8 +527,68 @@ bool sdp_data_element::parse_from
         }
         break;
     case bluetooth::sdp_attribute_value_type::alternative_data_element:
-        LogUtilError() << "how to parse this type?";
-        return false;
+        switch( size_index )
+        {
+        case 5:
+            type_size_index_size += 1;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = a_buffer[1];
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
+            {
+                return false;
+            }
+            break;
+        case 6:
+            type_size_index_size += 2;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = be_to_host16( a_buffer + 1 );
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
+            {
+                return false;
+            }
+            break;
+        case 7:
+            type_size_index_size += 4;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = be_to_host32( a_buffer + 1 );
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
+            {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+
+        {
+            std::vector<sdp_data_element> elements;
+            uint32_t max_elements_to_parse = s_max_elements_array_size;
+            bool inner_status = false;
+            inner_status = parse_elements_from( a_buffer + type_size_index_size, data_size,
+                max_elements_to_parse, elements, a_depth + 1, a_max_depth );
+            a_parsed_size = total_size_need;
+            if( inner_status )
+            {
+                value.set_alternative_elements( elements );
+            }
+            else
+            {
+                return false;
+            }
+        }
+        break;
     case bluetooth::sdp_attribute_value_type::url:
         switch( size_index )
         {
@@ -996,7 +1056,8 @@ std::vector<uint8_t> const& sdp_data_element::get_raw_buffer()const
 
 void sdp_data_element::prepare_raw_for_elements()
 {
-    if( m_value_type != sdp_attribute_value_type::data_elements )
+    if( m_value_type != sdp_attribute_value_type::data_elements &&
+        m_value_type != sdp_attribute_value_type::alternative_data_element )
     {
         LogUtilError() << "Cannot prepare raw data for not data elements.";
         return;

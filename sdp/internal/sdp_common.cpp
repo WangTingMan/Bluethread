@@ -530,8 +530,50 @@ bool sdp_data_element::parse_from
         LogUtilError() << "how to parse this type?";
         return false;
     case bluetooth::sdp_attribute_value_type::url:
-        LogUtilError() << "how to parse this type?";
-        return false;
+        switch( size_index )
+        {
+        case 5:
+            type_size_index_size += 1;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = a_buffer[1];
+            break;
+        case 6:
+            type_size_index_size += 2;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = be_to_host16( a_buffer + 1 );
+            break;
+        case 7:
+            type_size_index_size += 4;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = be_to_host32( a_buffer + 1 );
+            break;
+        default:
+            return false;
+        }
+
+        total_size_need = type_size_index_size + data_size;
+        if( a_size < total_size_need )
+        {
+            return false;
+        }
+        p_string_buffer = reinterpret_cast<const char8_t*>( a_buffer ) + type_size_index_size;
+        temp_string.assign( p_string_buffer, p_string_buffer + data_size );
+        if( temp_string.size() > 0 && 0x00 != temp_string.back() )
+        {
+            temp_string.push_back( 0x00 );
+        }
+        value.set_url_value( temp_string );
+        a_parsed_size = total_size_need;
+        break;
     default:
         return false;
     }
@@ -740,7 +782,49 @@ bool sdp_data_element::can_as_string()const
 {
     bool size_ok = false;
     size_ok = ( ( m_size_index == 5 ) || ( m_size_index == 6 ) || ( m_size_index == 7 ) );
-    if( ( m_value_type == sdp_attribute_value_type::boolean_type ) && size_ok )
+    if( ( m_value_type == sdp_attribute_value_type::string ) && size_ok )
+    {
+        return true;
+    }
+    return false;
+}
+
+void sdp_data_element::set_url_value( std::u8string const& a_value )
+{
+    set_string_value( a_value );
+    m_value_type = sdp_attribute_value_type::url;
+}
+
+std::u8string sdp_data_element::get_url_value()const
+{
+    std::u8string str;
+    if( !can_as_url() )
+    {
+        return str;
+    }
+
+    switch( m_size_index )
+    {
+    case 5:
+        str.assign( reinterpret_cast<const char8_t*>( m_buffer.data() ) + 1 );
+        break;
+    case 6:
+        str.assign( reinterpret_cast<const char8_t*>( m_buffer.data() ) + 3 );
+        break;
+    case 7:
+        str.assign( reinterpret_cast<const char8_t*>( m_buffer.data() ) + 9 );
+        break;
+    default:
+        break;
+    }
+    return str;
+}
+
+bool sdp_data_element::can_as_url()const
+{
+    bool size_ok = false;
+    size_ok = ( ( m_size_index == 5 ) || ( m_size_index == 6 ) || ( m_size_index == 7 ) );
+    if( ( m_value_type == sdp_attribute_value_type::url ) && size_ok )
     {
         return true;
     }

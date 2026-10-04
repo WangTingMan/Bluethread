@@ -230,6 +230,12 @@ public:
 
     bool can_as_string()const;
 
+    void set_url_value( std::u8string const& a_value );
+
+    std::u8string get_url_value()const;
+
+    bool can_as_url()const;
+
     void set_uint16_value( uint16_t a_value );
 
     uint16_t get_uint16_value()const;

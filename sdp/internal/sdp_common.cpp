@@ -19,7 +19,7 @@
 
 #include "framework/log_util.h"
 
-static constexpr uint64_t s_max_elements_array_size = 10;
+static constexpr uint64_t s_max_elements_array_size = 20;
 
 namespace bluetooth
 {

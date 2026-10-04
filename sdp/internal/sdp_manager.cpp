@@ -428,23 +428,119 @@ void sdp_manager::handle_service_search_attribute_request
     )
 {
     bool status = false;
-    uint8_t* p_sdu = a_parameter_buffer;
+    uint8_t* p_buffer = a_parameter_buffer;
     uint16_t parameter_size = a_parameter_size;
     uint16_t transaction_id = a_sdp_header.get_transaction_id();
+    uint32_t size_left = parameter_size;
 
-    std::vector<sdp_data_element> elements;
-    status = sdp_data_element::parse_elements_from( a_parameter_buffer, a_parameter_size, 4, elements );
-    if( !status || elements.size() < 4 )
+    std::vector<uuid> uuids;
+
+    uint32_t parsed_size = 0;
+    sdp_data_element element;
+    std::vector<sdp_data_element> uuid_elements;
+    status = sdp_data_element::parse_from( p_buffer, size_left, parsed_size, element );
+    if( !status )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    if( !element.can_as_elements() )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    uuid_elements = element.get_elements();
+    for( auto& ele : uuid_elements )
+    {
+        if( !ele.can_as_uuid() )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+            return;
+        }
+        uuids.push_back( ele.get_uuid() );
+    }
+    if( uuids.empty() || uuids.size() > 12 )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return;
     }
 
-    std::vector<uint8_t> continue_state;
-    std::vector<uuid> uuids;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
     uint16_t max_attribute_bytes_count = 0;
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    max_attribute_bytes_count = be_to_host16( p_buffer );
+    parsed_size = 2;
+
     std::vector<uint16_t> requested_ids;
     std::vector<std::pair<uint16_t, uint16_t>> requested_id_ranges;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    std::vector<sdp_data_element> id_elements;
+    status = sdp_data_element::parse_from( p_buffer, size_left, parsed_size, element );
+    if( !status )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    if( !element.can_as_elements() )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    id_elements = element.get_elements();
+    for( auto& ele : id_elements )
+    {
+        uint16_t id16 = 0;
+        uint32_t id32 = 0;
+        if( ele.can_as_uint16() )
+        {
+            id16 = ele.get_uint16_value();
+            requested_ids.push_back( id16 );
+            continue;
+        }
+
+        if( ele.can_as_uint32() )
+        {
+            id32 = ele.get_uint32_value();
+            uint16_t high16 = id32 >> 16;
+            uint16_t low16 = id32 & 0xFFFF;
+            requested_id_ranges.push_back( std::make_pair( high16, low16 ) );
+        }
+    }
+
+    std::vector<uint8_t> continue_state;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    uint16_t continue_state_size = 0;
+    if( size_left < 1 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return;
+    }
+    continue_state_size = p_buffer[0];
+    if( continue_state_size > 16 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+        return;
+    }
+    parsed_size = 1;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    if( continue_state_size > 0 )
+    {
+        if( size_left < continue_state_size )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+            return;
+        }
+        continue_state.resize( continue_state_size );
+        memcpy( continue_state.data(), p_buffer, continue_state_size );
+    }
 
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );

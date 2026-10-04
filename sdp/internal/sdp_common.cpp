@@ -19,6 +19,8 @@
 
 #include "framework/log_util.h"
 
+static constexpr uint64_t s_max_elements_array_size = 10;
+
 namespace bluetooth
 {
 
@@ -158,326 +160,427 @@ bool parse_attribute_value_header
     return true;
 }
 
-bool parse_elements_from( uint8_t* a_buffer, uint32_t a_size, std::vector<sdp_data_element>& a_elements )
-{
-    bool ret = false;
-    uint8_t* cur = a_buffer;
-    uint32_t size_left = a_size;
-    while( cur < a_buffer + a_size )
-    {
-        sdp_attribute_value_type type;
-        uint32_t data_size;
-        uint8_t const* data = nullptr;
-        ret = parse_attribute_value_header( cur, size_left, type, data_size, data );
-        if( !ret )
-        {
-            return ret;
-        }
-
-        auto [attribute, parse_ret] = sdp_data_element::parse_from
-            ( cur, data_size + static_cast<uint32_t>( data - cur ) );
-        if( !parse_ret )
-        {
-            ret = parse_ret;
-            break;
-        }
-        else
-        {
-            a_elements.push_back( attribute );
-        }
-
-        cur += data_size + ( data - cur );
-    }
-
-    ret = true;
-    return ret;
-}
-
-bool sdp_data_element::recognite_data_element( uint8_t* a_buffer, uint32_t a_size, uint32_t& a_invalid_size )
+bool sdp_data_element::recognite_data_element( uint8_t* a_buffer, uint32_t a_size, uint32_t& a_valid_size )
 {
     bool ret = false;
     sdp_attribute_value_type type = sdp_attribute_value_type::null;
     uint32_t data_size = 0;
     uint8_t const* data = nullptr;
-    a_invalid_size = 0;
+    a_valid_size = 0;
 
     ret = parse_attribute_value_header( a_buffer, a_size, type, data_size, data );
 
     if( ret )
     {
-        a_invalid_size = ( data - a_buffer ) + data_size;
-        if( a_invalid_size > a_size )
-        {
-            ret = false;
-            a_invalid_size = 0;
-        }
+        a_valid_size =  data_size;
     }
     return ret;
 }
 
-std::tuple<sdp_data_element, bool> sdp_data_element::parse_from( uint8_t* a_buffer, uint32_t a_size )
+bool sdp_data_element::parse_from
+    (
+    uint8_t const* a_buffer,
+    uint32_t a_size,
+    uint32_t& a_parsed_size,
+    sdp_data_element& a_value,
+    uint16_t a_depth,
+    uint16_t a_max_depth
+    )
 {
-    sdp_data_element value;
-    bool ret = false;
-    if( 0 == a_size )
+    a_parsed_size = 0;
+    a_value.clear();
+    sdp_data_element& value = a_value;
+    bool status = false;
+    if( 0 == a_size || a_depth >= a_max_depth || a_buffer == nullptr )
     {
-        return { std::move( value ),ret };
+        return false;
     }
 
-    sdp_attribute_value_type type = static_cast< sdp_attribute_value_type >( a_buffer[0] >> 3 );
+    uint8_t raw_type = a_buffer[0] >> 3;
+    if( raw_type > 0x08 )
+    {
+        return false;
+    }
+
+    sdp_attribute_value_type type = static_cast<sdp_attribute_value_type>( raw_type );
     uint8_t size_index = a_buffer[0] & 0x07;
 
     uint64_t data_size = 0;
+    uint64_t type_size_index_size = 1;
+    uint64_t total_size_need = 0;
     std::u8string temp_string;
     char8_t const* p_string_buffer = nullptr;
-    uint8_t* p_parsed_buffer = nullptr;
 
     switch( type )
     {
     case bluetooth::sdp_attribute_value_type::null:
+    {
         value.set_null_value();
-        ret = ( 0 == size_index );
+        status = ( 0 == size_index );
+        data_size = 0;
+        type_size_index_size = 1;
+        a_parsed_size = 1;
+        return status;
+    }
         break;
     case bluetooth::sdp_attribute_value_type::unsigned_integer:
+        type_size_index_size = 1;
         switch( size_index )
         {
         case 0:
-            if( a_size != 2 )
+            data_size = 1;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uint8_value( a_buffer[1] );
+            a_parsed_size = total_size_need;
             break;
         case 1:
-            if( a_size != 3 )
+            data_size = 2;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uint16_value( be_to_host16( a_buffer + 1 ) );
+            a_parsed_size = total_size_need;
             break;
         case 2:
-            if( a_size != 5 )
+            data_size = 4;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uint32_value( be_to_host32( a_buffer + 1 ) );
+            a_parsed_size = total_size_need;
             break;
         case 3:
-            if( a_size != 9 )
+            data_size = 8;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for 64 bit unsigned integer";
+            break;
         case 4:
-            if( a_size != 17 )
+            data_size = 16;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for 128 bit unsigned integer";
+            break;
         default:
-            return { std::move( value ), false };
+            return false;
         }
         break;
     case bluetooth::sdp_attribute_value_type::signed_integer:
         switch( size_index )
         {
         case 0:
-            if( a_size != 2 )
+            data_size = 1;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             // TODO
             LogUtilError() << "No implementation for signed integer";
             break;
         case 1:
-            if( a_size != 3 )
+            data_size = 2;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for signed integer";
             break;
         case 2:
-            if( a_size != 5 )
+            data_size = 4;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for signed integer";
             break;
         case 3:
-            if( a_size != 9 )
+            data_size = 8;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for signed integer";
+            break;
         case 4:
-            if( a_size != 17 )
+            data_size = 16;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            a_parsed_size = total_size_need;
             LogUtilError() << "No implementation for signed integer";
+            break;
         default:
-            return { std::move( value ), false };
+            return false;
         }
         break;
     case bluetooth::sdp_attribute_value_type::uuid:
         switch( size_index )
         {
         case 1:
-            if( a_size != 3 )
+            data_size = 2;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uuid( uuid::from_16bit( be_to_host16( a_buffer + 1 ) ) );
+            a_parsed_size = total_size_need;
             break;
         case 2:
-            if( a_size != 5 )
+            data_size = 4;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uuid( uuid::from_32bit( be_to_host32( a_buffer + 1 ) ) );
+            a_parsed_size = total_size_need;
             break;
         case 4:
-            if( a_size != 17 )
+            data_size = 16;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_uuid( uuid::from_128bit_be( a_buffer + 1 ) );
+            a_parsed_size = total_size_need;
             break;
         default:
-            return { std::move( value ), false };
+            return false;
         }
         break;
     case bluetooth::sdp_attribute_value_type::string:
         switch( size_index )
         {
         case 5:
-            if( a_size < 2 )
+            type_size_index_size += 1;
+            if( a_size < type_size_index_size )
             {
-                return { std::move( value ), false };
+                return false;
             }
-            p_string_buffer = reinterpret_cast< const char8_t* >( a_buffer ) + 2;
             data_size = a_buffer[1];
-            if( a_size < 2 + data_size )
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            p_string_buffer = reinterpret_cast<const char8_t*>( a_buffer ) + type_size_index_size;
             temp_string.assign( p_string_buffer, p_string_buffer + data_size );
-            if( 0x00 != temp_string.back() )
+            if( temp_string.size() > 0 && 0x00 != temp_string.back() )
             {
                 temp_string.push_back( 0x00 );
             }
             value.set_string_value( temp_string );
+            a_parsed_size = total_size_need;
             break;
         case 6:
-            if( a_size < 3 )
+            type_size_index_size += 2;
+            if( a_size < type_size_index_size )
             {
-                return { std::move( value ), false };
+                return false;
             }
-            p_string_buffer = reinterpret_cast< const char8_t* >( a_buffer ) + 3;
             data_size = be_to_host16( a_buffer + 1 );
-            if( a_size < 3 + data_size )
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            p_string_buffer = reinterpret_cast<const char8_t*>( a_buffer ) + type_size_index_size;
             temp_string.assign( p_string_buffer, p_string_buffer + data_size );
-            if( 0x00 != temp_string.back() )
+            if( temp_string.size() > 0 && 0x00 != temp_string.back() )
             {
                 temp_string.push_back( 0x00 );
             }
             value.set_string_value( temp_string );
+            a_parsed_size = total_size_need;
             break;
         case 7:
-            if( a_size < 5 )
+            type_size_index_size += 4;
+            if( a_size < type_size_index_size )
             {
-                return { std::move( value ), false };
+                return false;
             }
-            p_string_buffer = reinterpret_cast< const char8_t* >( a_buffer ) + 5;
             data_size = be_to_host32( a_buffer + 1 );
-            if( a_size < 5 + data_size )
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
+            p_string_buffer = reinterpret_cast<const char8_t*>( a_buffer ) + type_size_index_size;
             temp_string.assign( p_string_buffer, p_string_buffer + data_size );
-            if( 0x00 != temp_string.back() )
+            if( temp_string.size() > 0 && 0x00 != temp_string.back() )
             {
                 temp_string.push_back( 0x00 );
             }
             value.set_string_value( temp_string );
+            a_parsed_size = total_size_need;
             break;
         default:
-            return { std::move( value ), false };
+            return false;
         }
         break;
     case bluetooth::sdp_attribute_value_type::boolean_type:
         switch( size_index )
         {
         case 0:
-            if( a_size != 2 )
+            data_size = 1;
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
+                return false;
             }
             value.set_boolean( a_buffer[1] != 0x00 );
+            a_parsed_size = total_size_need;
             break;
         default:
-            return { std::move( value ), false };
+            return false;
         }
         break;
     case bluetooth::sdp_attribute_value_type::data_elements:
         switch( size_index )
         {
         case 5:
-            if( a_size < 2 )
+            type_size_index_size += 1;
+            if( a_size < type_size_index_size )
             {
-                return { std::move( value ), false };
+                return false;
             }
             data_size = a_buffer[1];
-            if( a_size < 2 + data_size )
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
-            }
-            else
-            {
-                std::vector<sdp_data_element> elements;
-                ret = parse_elements_from( a_buffer + 2, static_cast<uint32_t>( data_size - 2 ), elements );
-                value.set_elements( elements );
+                return false;
             }
             break;
         case 6:
-            if( a_size < 3 )
+            type_size_index_size += 2;
+            if( a_size < type_size_index_size )
             {
-                return { std::move( value ), false };
+                return false;
             }
             data_size = be_to_host16( a_buffer + 1 );
-            if( a_size < 3 + data_size )
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
             {
-                return { std::move( value ), false };
-            }
-            else
-            {
-                std::vector<sdp_data_element> elements;
-                ret = parse_elements_from( a_buffer + 3, static_cast<uint32_t>( data_size - 3 ), elements );
-                value.set_elements( elements );
+                return false;
             }
             break;
         case 7:
-            LogUtilError() << "Not support such more data";
+            type_size_index_size += 4;
+            if( a_size < type_size_index_size )
+            {
+                return false;
+            }
+            data_size = be_to_host32( a_buffer + 1 );
+            total_size_need = type_size_index_size + data_size;
+            if( a_size < total_size_need )
+            {
+                return false;
+            }
             break;
         default:
-            return { std::move( value ), false };
+            return false;
+        }
+
+        {
+            std::vector<sdp_data_element> elements;
+            uint32_t max_elements_to_parse = s_max_elements_array_size;
+            bool inner_status = false;
+            inner_status = parse_elements_from( a_buffer + type_size_index_size, data_size,
+                max_elements_to_parse, elements, a_depth + 1, a_max_depth );
+            a_parsed_size = total_size_need;
+            if( inner_status )
+            {
+                value.set_elements( elements );
+            }
+            else
+            {
+                return false;
+            }
         }
         break;
     case bluetooth::sdp_attribute_value_type::alternative_data_element:
         LogUtilError() << "how to parse this type?";
-        return { std::move( value ), false };
+        return false;
     case bluetooth::sdp_attribute_value_type::url:
         LogUtilError() << "how to parse this type?";
-        return { std::move( value ), false };
+        return false;
     default:
-        break;
+        return false;
     }
 
-    ret = true;
-    return { std::move( value ),ret };
+    status = true;
+    return status;
+}
+
+bool sdp_data_element::parse_elements_from
+    (
+    uint8_t const* a_buffer,
+    uint32_t a_size,
+    uint16_t a_max_root_elements,
+    std::vector<sdp_data_element>& a_elements,
+    uint16_t a_depth,
+    uint16_t a_max_depth
+    )
+{
+    bool status = false;
+
+    if( a_max_root_elements == 0 )
+    {
+        status = true;
+        return status;
+    }
+
+    if( a_buffer == nullptr || a_size == 0 || a_depth >= a_max_depth )
+    {
+        return false;
+    }
+
+    uint32_t parsed_size = 0;
+    uint8_t const* p_buffer = a_buffer;
+    uint32_t remaining_size = a_size;
+    sdp_data_element element;
+
+    for( int i = 0; i < a_max_root_elements && remaining_size > 0; ++i )
+    {
+        status = parse_from( p_buffer, remaining_size, parsed_size, element, a_depth + 1, a_max_depth );
+        if( !status )
+        {
+            return false;
+        }
+        a_elements.push_back( std::move( element ) );
+        p_buffer += parsed_size;
+        remaining_size -= parsed_size;
+    }
+
+    return status;
 }
 
 void sdp_data_element::set_null_value()
@@ -657,7 +760,7 @@ void sdp_data_element::set_uint16_value( uint16_t a_value )
 
 uint16_t sdp_data_element::get_uint16_value()const
 {
-    if( can_as_uint32() )
+    if( can_as_uint16() )
     {
         return be_to_host16( m_buffer.data() + 1 );
     }

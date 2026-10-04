@@ -360,21 +360,44 @@ std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
     uint8_t* p_buffer = a_hci_data->m_buffer.data() + a_sdp_header.header_size();
     int32_t size_left = static_cast<int32_t>( a_hci_data->m_buffer.size() )
         - static_cast<int32_t>( a_sdp_header.header_size() );
-    if( size_left < 2 )
+
+    uint32_t value_size = 0;
+    bool ret = sdp_data_element::recognite_data_element( p_buffer, size_left, value_size );
+    if( !ret )
     {
-        LogUtilError() << "Invalid error rsp packet, size left: " << size_left;
+        LogUtilError() << "Invalid error rsp packet, cannot recognite data element";
         return error_rsp;
     }
 
-    if( a_sdp_header.get_parameters_length() != 0x02 )
+    if( value_size != 0x02 )
     {
-        LogUtilError() << "Invalid error rsp packet, parameters length: "
-            << a_sdp_header.get_parameters_length();
+        LogUtilError() << "Invalid error rsp packet, value length: "
+            << value_size;
+        return error_rsp;
+    }
+
+    sdp_data_element value;
+    uint32_t parsed_size = 0;
+    auto parse_ret = sdp_data_element::parse_from( p_buffer, value_size, parsed_size, value );
+    if( !parse_ret )
+    {
+        LogUtilError() << "Invalid error rsp packet, cannot parse data element";
+        return error_rsp;
+    }
+
+    uint16_t error_code = 0;
+    if( value.can_as_uint16() )
+    {
+        error_code = value.get_uint16_value();
+    }
+    else
+    {
+        LogUtilError() << "Invalid error rsp packet, cannot get error code";
         return error_rsp;
     }
 
     error_rsp = std::make_shared<sdp_error_rsp>();
-    error_rsp->m_error_code = static_cast<sdp_error_code>( be_to_host16(p_buffer) );
+    error_rsp->m_error_code = static_cast<sdp_error_code>( error_code );
     error_rsp->m_transaction_id = a_sdp_header.get_transaction_id();
     error_rsp->m_local_cid = a_sdp_header.get_channel_id();
     return error_rsp;
@@ -393,12 +416,6 @@ std::shared_ptr<sdp_servbice_search_req> sdp_manager::parse_service_search_reque
     uint8_t* p_sdu = a_parameter_buffer;
     uint16_t parameter_size = a_parameter_size;
     uint16_t transaction_id = a_sdp_header.get_transaction_id();
-    auto [attribute_value, ret] = sdp_data_element::parse_from( p_sdu, parameter_size );
-    if( !ret )
-    {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return req;
-    }
 
     return req;
 }
@@ -410,114 +427,24 @@ void sdp_manager::handle_service_search_attribute_request
     uint16_t    a_parameter_size
     )
 {
+    bool status = false;
     uint8_t* p_sdu = a_parameter_buffer;
     uint16_t parameter_size = a_parameter_size;
     uint16_t transaction_id = a_sdp_header.get_transaction_id();
 
-    uint32_t pattern_size = 0;
-    bool ret = sdp_data_element::recognite_data_element( p_sdu, parameter_size, pattern_size );
-    if( !ret )
+    std::vector<sdp_data_element> elements;
+    status = sdp_data_element::parse_elements_from( a_parameter_buffer, a_parameter_size, 4, elements );
+    if( !status || elements.size() < 4 )
     {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    auto [pattern, parse_ret] = sdp_data_element::parse_from( p_sdu, pattern_size );
-    if( !pattern.can_as_elements() )
-    {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    auto uuids = pattern.get_uuid_from_elements();
-    if( uuids.size() > 12 )
-    {
-        // This value's minmum value is 12. See sdp specification
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    if( parameter_size < pattern_size + 2 )
-    {
-        // We need maximum attribute byte count here. But there is no more buffer to use.
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    uint16_t max_attribute_bytes_count = be_to_host16( p_sdu + pattern_size );
-    if( max_attribute_bytes_count < 0x0007 )
-    {
-        // This value's minmum value is 0x0007. See sdp specification
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    uint32_t attribute_id_size = 0;
-    ret = sdp_data_element::recognite_data_element( p_sdu + pattern_size + 2, parameter_size - pattern_size - 2, attribute_id_size );
-    if( !ret )
-    {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    auto [attribute_ids, parse_id_ret] = sdp_data_element::parse_from( p_sdu + pattern_size + 2, attribute_id_size );
-    if( !attribute_ids.can_as_elements() )
-    {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    if( !attribute_ids.can_as_elements() )
-    {
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    std::vector<uint16_t> requested_ids;
-    std::vector<std::pair<uint16_t, uint16_t>> requested_id_ranges;
-    std::vector<sdp_data_element>const& ids = attribute_ids.get_elements();
-    for( auto& ele : ids )
-    {
-        if( ele.can_as_uint16() )
-        {
-            requested_ids.push_back( ele.get_uint16_value() );
-            continue;
-        }
-
-        if( ele.can_as_uint32() )
-        {
-            uint32_t range_raw = ele.get_uint32_value();
-            uint8_t buffer[4] = { 0 };
-            write_be32( buffer, range_raw );
-            std::pair<uint16_t, uint16_t> range;
-            range.first = be_to_host16( buffer );
-            range.second = be_to_host16( buffer + 2 );
-            requested_id_ranges.push_back( range );
-            continue;
-        }
-
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    if( parameter_size < pattern_size + 2 + attribute_id_size + 1 )
-    {
-        // We need continuation state here. But there is no more buffer to use.
-        //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
-    }
-
-    uint8_t continue_size = p_sdu[pattern_size + 2 + attribute_id_size];
-    if( parameter_size < pattern_size + 2 + attribute_id_size + 1 + continue_size )
-    {
-        // We need continuation state here. But there is no more buffer to use.
-        //send_error_rsp( sdp_error_code::invalid_syntax );
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return;
     }
 
     std::vector<uint8_t> continue_state;
-    continue_state.insert( continue_state.end(), p_sdu + pattern_size + 2 + attribute_id_size + 1,
-        p_sdu + pattern_size + 2 + attribute_id_size + 1 + continue_size );
+    std::vector<uuid> uuids;
+    uint16_t max_attribute_bytes_count = 0;
+    std::vector<uint16_t> requested_ids;
+    std::vector<std::pair<uint16_t, uint16_t>> requested_id_ranges;
 
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );

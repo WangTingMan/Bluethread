@@ -18,6 +18,8 @@
 #include "bluetooth_address.h"
 #include "common.h"
 
+#include "sdp_protocol.h"
+
 namespace bluetooth
 {
 
@@ -122,6 +124,14 @@ public:
     {
         return ( m_acl_handle == a_acl_handle );
     }
+
+public:
+
+    void handle_error_rsp
+        (
+        sdp_header& _sdp_header,
+        std::shared_ptr<sdp_error_rsp> const& a_error_rsp
+        );
 
 public:
 

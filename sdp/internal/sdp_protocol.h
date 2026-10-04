@@ -83,6 +83,11 @@ public:
         m_transaction_id = a_transaction_id;
     }
 
+    uint16_t get_transaction_id()const
+    {
+        return m_transaction_id;
+    }
+
     void parse_from_raw_data( uint8_t* a_buffer, uint32_t a_size )override;
 
 private:
@@ -114,6 +119,7 @@ public:
     sdp_error_rsp()
     {
         m_pdu_id = sdp_pdu_id::sdp_error_rsp;
+        m_parameter_length = 2;
     }
 
     sdp_error_code m_error_code = sdp_error_code::reserve_code;

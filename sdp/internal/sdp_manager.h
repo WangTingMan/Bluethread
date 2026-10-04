@@ -1,3 +1,19 @@
+/*
+ * Bluethread - Self-developed dual-mode Bluetooth protocol stack
+ * Copyright (C) 2026 Wang Fei.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License v3.0 for more details.
+ *
+ * Commercial closed-source licenses are available upon request.
+ */
+
 #pragma once
 
 #include "sdp_service_record_db.h"
@@ -49,9 +65,25 @@ public:
 
     void handle_sdu( std::shared_ptr<hci_data> );
 
-    void handle_service_search_request( std::shared_ptr<hci_data> const& a_hci_data );
+    std::shared_ptr<sdp_error_rsp> parse_error_rsp
+        (
+        sdp_header& a_sdp_header,
+        std::shared_ptr<hci_data> const& a_hci_data
+        );
 
-    void handle_service_search_attribute_request( std::shared_ptr<hci_data> const& a_hci_data );
+    std::shared_ptr<sdp_servbice_search_req> parse_service_search_request
+        (
+        sdp_header& a_sdp_header,
+        uint8_t* a_parameter_buffer,
+        uint16_t a_parameter_size
+        );
+
+    void handle_service_search_attribute_request
+        (
+        sdp_header& a_sdp_header,
+        uint8_t* a_parameter_buffer,
+        uint16_t a_parameter_size
+        );
 
     void handle_register_record( std::shared_ptr<sdp_task> const& a_task );
 
@@ -70,7 +102,11 @@ public:
 
     void send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code );
 
-    bool verify_received_packet( std::shared_ptr<hci_data> const& a_packet );
+    bool verify_received_packet
+        (
+        sdp_header& a_sdp_header,
+        std::shared_ptr<hci_data> const& a_packet
+        );
 
     std::shared_ptr<sdp_connection> find_connection( bluetooth_address const& a_address );
 

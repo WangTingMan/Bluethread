@@ -14,16 +14,18 @@
  * Commercial closed-source licenses are available upon request.
  */
 
-#include "sdp/sdp_task.h"
-#include "../sdp_module.h"
+#include "sdp_connection.h"
 
 namespace bluetooth
 {
 
-sdp_task::sdp_task()
+void sdp_connection::handle_error_rsp
+    (
+    sdp_header& _sdp_header,
+    std::shared_ptr<sdp_error_rsp> const& a_error_rsp
+    )
 {
-    set_target_module( sdp_module::s_sdp_module_name );
-    m_task_type = static_cast<framework::task_type>( s_sdp_task_type_id );
+
 }
 
 }

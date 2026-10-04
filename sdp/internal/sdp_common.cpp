@@ -22,13 +22,24 @@
 namespace bluetooth
 {
 
+/**
+* @brief Parse SDP data element header, extract value type and payload length
+* @param a_buffer Input buffer containing SDP data element header
+* @param a_size Total available bytes in a_buffer
+* @param a_type [out] Parsed SDP attribute data element type
+* @param a_data_size [out] Payload length of data element
+* @param a_data [out] Pointer to start of payload; nullptr if no separate payload
+* @return true if header parsed successfully, false for malformed / insufficient buffer
+* @note SDP data element header format: 5bit type + 3bit size_index
+* @warning When size_index ==0, payload is embedded in header, a_data = nullptr
+*/
 bool parse_attribute_value_header
     (
-    uint8_t* a_buffer,
+    uint8_t const* a_buffer,
     uint32_t a_size,
     sdp_attribute_value_type& a_type,
     uint32_t& a_data_size,
-    uint8_t*& a_data
+    uint8_t const*& a_data
     )
 {
     if( a_size < 1 )
@@ -36,7 +47,13 @@ bool parse_attribute_value_header
         return false;
     }
 
-    a_type = static_cast< sdp_attribute_value_type >( a_buffer[0] >> 3 );
+    uint8_t raw_type = a_buffer[0] >> 3;
+    if( raw_type > 0x08 )
+    {
+        return false;
+    }
+
+    a_type = static_cast<sdp_attribute_value_type>( raw_type );
     uint8_t size_index = a_buffer[0] & 0x07;
     a_data_size = 0;
     a_data = nullptr;
@@ -51,23 +68,43 @@ bool parse_attribute_value_header
         else
         {
             a_data_size = 1;
+            if( a_size < a_data_size + 1 )
+            {
+                return false;
+            }
             a_data = a_buffer + 1;
         }
         break;
     case 1:
         a_data_size = 2;
+        if( a_size < a_data_size + 1 )
+        {
+            return false;
+        }
         a_data = a_buffer + 1;
         break;
     case 2:
         a_data_size = 4;
+        if( a_size < a_data_size + 1 )
+        {
+            return false;
+        }
         a_data = a_buffer + 1;
         break;
     case 3:
         a_data_size = 8;
+        if( a_size < a_data_size + 1 )
+        {
+            return false;
+        }
         a_data = a_buffer + 1;
         break;
     case 4:
         a_data_size = 16;
+        if( a_size < a_data_size + 1 )
+        {
+            return false;
+        }
         a_data = a_buffer + 1;
         break;
     case 5:
@@ -78,6 +115,10 @@ bool parse_attribute_value_header
         else
         {
             a_data_size = a_buffer[1];
+            if( a_size < a_data_size + 2 )
+            {
+                return false;
+            }
             a_data = a_buffer + 2;
         }
         break;
@@ -89,6 +130,10 @@ bool parse_attribute_value_header
         else
         {
             a_data_size = be_to_host16( a_buffer + 1 );
+            if( a_size < a_data_size + 3 )
+            {
+                return false;
+            }
             a_data = a_buffer + 3;
         }
         break;
@@ -100,7 +145,11 @@ bool parse_attribute_value_header
         else
         {
             a_data_size = be_to_host32( a_buffer + 1 );
-            a_data = a_buffer + 6;
+            if( a_data_size > ( a_size - 5 ) )
+            {
+                return false;
+            }
+            a_data = a_buffer + 5;
         }
         break;
     default:
@@ -118,7 +167,7 @@ bool parse_elements_from( uint8_t* a_buffer, uint32_t a_size, std::vector<sdp_da
     {
         sdp_attribute_value_type type;
         uint32_t data_size;
-        uint8_t* data = nullptr;
+        uint8_t const* data = nullptr;
         ret = parse_attribute_value_header( cur, size_left, type, data_size, data );
         if( !ret )
         {
@@ -149,7 +198,7 @@ bool sdp_data_element::recognite_data_element( uint8_t* a_buffer, uint32_t a_siz
     bool ret = false;
     sdp_attribute_value_type type = sdp_attribute_value_type::null;
     uint32_t data_size = 0;
-    uint8_t* data = nullptr;
+    uint8_t const* data = nullptr;
     a_invalid_size = 0;
 
     ret = parse_attribute_value_header( a_buffer, a_size, type, data_size, data );

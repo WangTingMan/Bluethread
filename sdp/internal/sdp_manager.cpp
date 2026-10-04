@@ -1,3 +1,19 @@
+/*
+ * Bluethread - Self-developed dual-mode Bluetooth protocol stack
+ * Copyright (C) 2026 Wang Fei.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License v3.0 for more details.
+ *
+ * Commercial closed-source licenses are available upon request.
+ */
+
 #include "sdp_manager.h"
 
 #include "framework/log_util.h"
@@ -274,7 +290,8 @@ void sdp_manager::handle_connection_state_changed
 
 void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
 {
-    if( a_sdu->m_buffer.size() < m_sdp_header.l2cap_header::header_size() )
+    sdp_header _sdp_header;
+    if( a_sdu->m_buffer.size() < _sdp_header.l2cap_header::header_size() )
     {
         LogUtilError() << "cannot parsing completed l2cap header, so ignore this packet";
         return;
@@ -291,19 +308,31 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         return;
     }
 
-    if( !verify_received_packet( a_sdu ) )
+    if( !verify_received_packet( _sdp_header, a_sdu ) )
     {
         send_error_rsp( _l2cap_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return;
     }
 
-    sdp_pdu_id pdu_id = m_sdp_header.get_pdu_id();
+    sdp_pdu_id pdu_id = _sdp_header.get_pdu_id();
+
+    uint8_t* _parameter_buffer = a_sdu->m_buffer.data() + _sdp_header.header_size();
+    uint16_t _parameter_size = a_sdu->m_buffer.size() - _sdp_header.header_size();
     switch( pdu_id )
     {
     case bluetooth::sdp_pdu_id::sdp_error_rsp:
+        {
+            auto error_rsp = parse_error_rsp( _sdp_header, a_sdu );
+            if( error_rsp )
+            {
+                sdp_con->handle_error_rsp( _sdp_header, error_rsp );
+            }
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_req:
-        handle_service_search_request( a_sdu );
+        {
+            auto req = parse_service_search_request( _sdp_header, _parameter_buffer, _parameter_size );
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_rsp:
         break;
@@ -312,7 +341,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_req:
-        handle_service_search_attribute_request( a_sdu );
+        handle_service_search_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_rsp:
         break;
@@ -321,28 +350,69 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     }
 }
 
-void sdp_manager::handle_service_search_request( std::shared_ptr<hci_data> const& a_hci_data )
+std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
+    (
+    sdp_header& a_sdp_header,
+    std::shared_ptr<hci_data> const& a_hci_data
+    )
 {
-    uint8_t* p_sdp_header = a_hci_data->m_buffer.data() + m_sdp_header.l2cap_header::header_size();
-    uint8_t* p_sdu = p_sdp_header + 5;
-    uint16_t parameter_size = be_to_host16( p_sdp_header + 3 );
-    uint16_t transaction_id = be_to_host16( p_sdp_header + 1 );
+    std::shared_ptr<sdp_error_rsp> error_rsp;
+    uint8_t* p_buffer = a_hci_data->m_buffer.data() + a_sdp_header.header_size();
+    int32_t size_left = static_cast<int32_t>( a_hci_data->m_buffer.size() )
+        - static_cast<int32_t>( a_sdp_header.header_size() );
+    if( size_left < 2 )
+    {
+        LogUtilError() << "Invalid error rsp packet, size left: " << size_left;
+        return error_rsp;
+    }
+
+    if( a_sdp_header.get_parameters_length() != 0x02 )
+    {
+        LogUtilError() << "Invalid error rsp packet, parameters length: "
+            << a_sdp_header.get_parameters_length();
+        return error_rsp;
+    }
+
+    error_rsp = std::make_shared<sdp_error_rsp>();
+    error_rsp->m_error_code = static_cast<sdp_error_code>( be_to_host16(p_buffer) );
+    error_rsp->m_transaction_id = a_sdp_header.get_transaction_id();
+    error_rsp->m_local_cid = a_sdp_header.get_channel_id();
+    return error_rsp;
+}
+
+std::shared_ptr<sdp_servbice_search_req> sdp_manager::parse_service_search_request
+    (
+    sdp_header& a_sdp_header,
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
+    )
+{
+    std::shared_ptr<sdp_servbice_search_req> req;
+
+    uint8_t* p_sdp_header = a_parameter_buffer - 5;
+    uint8_t* p_sdu = a_parameter_buffer;
+    uint16_t parameter_size = a_parameter_size;
+    uint16_t transaction_id = a_sdp_header.get_transaction_id();
     auto [attribute_value, ret] = sdp_data_element::parse_from( p_sdu, parameter_size );
     if( !ret )
     {
         //send_error_rsp( sdp_error_code::invalid_syntax );
-        return;
+        return req;
     }
 
-
+    return req;
 }
 
-void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_data> const& a_hci_data )
+void sdp_manager::handle_service_search_attribute_request
+    (
+    sdp_header& a_sdp_header,
+    uint8_t*    a_parameter_buffer,
+    uint16_t    a_parameter_size
+    )
 {
-    uint8_t* p_sdp_header = a_hci_data->m_buffer.data() + m_sdp_header.l2cap_header::header_size();
-    uint8_t* p_sdu = p_sdp_header + 5;
-    uint16_t parameter_size = be_to_host16( p_sdp_header + 3 );
-    uint16_t transaction_id = be_to_host16( p_sdp_header + 1 );
+    uint8_t* p_sdu = a_parameter_buffer;
+    uint16_t parameter_size = a_parameter_size;
+    uint16_t transaction_id = a_sdp_header.get_transaction_id();
 
     uint32_t pattern_size = 0;
     bool ret = sdp_data_element::recognite_data_element( p_sdu, parameter_size, pattern_size );
@@ -451,8 +521,7 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
 
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
-    uint16_t acl_handle = 0;
-    get_acl_handle_from_hci( a_hci_data, acl_handle );
+    uint16_t acl_handle = a_sdp_header.get_acl_handle();
     auto [remote_device, has] = acl_db->get_address( acl_handle );
 
     std::shared_ptr<sdp_service_search_attribute_req> request;
@@ -462,7 +531,7 @@ void sdp_manager::handle_service_search_attribute_request( std::shared_ptr<hci_d
     request->m_matching_ids = requested_ids;
     request->m_requested_id_ranges = requested_id_ranges;
     request->m_continue_info = continue_state;
-    request->m_local_cid = retrieve_local_cid( a_hci_data );
+    request->m_local_cid = a_sdp_header.get_channel_id();
     request->m_remote_device = remote_device;
     m_local_service.handle_service_search_attribute_request( request );
 }
@@ -627,19 +696,23 @@ void sdp_manager::send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code )
 
 }
 
-bool sdp_manager::verify_received_packet( std::shared_ptr<hci_data> const& a_packet )
+bool sdp_manager::verify_received_packet
+    (
+    sdp_header& a_sdp_header,
+    std::shared_ptr<hci_data> const& a_packet
+    )
 {
-    if( a_packet->m_buffer.size() < m_sdp_header.header_size() )
+    if( a_packet->m_buffer.size() < a_sdp_header.header_size() )
     {
         return false;
     }
 
-    m_sdp_header.parse_from_raw_data( a_packet->m_buffer.data(),
+    a_sdp_header.parse_from_raw_data( a_packet->m_buffer.data(),
         static_cast<uint32_t>( a_packet->m_buffer.size() ) );
 
-    uint16_t parameter_size = m_sdp_header.get_parameters_length();
+    uint16_t parameter_size = a_sdp_header.get_parameters_length();
 
-    if( a_packet->m_buffer.size() < m_sdp_header.header_size() + parameter_size )
+    if( a_packet->m_buffer.size() < a_sdp_header.header_size() + parameter_size )
     {
         return false;
     }

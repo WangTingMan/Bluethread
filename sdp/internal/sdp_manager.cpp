@@ -367,6 +367,230 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     }
 }
 
+void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_task )
+{
+    auto detail_tsk = std::static_pointer_cast<sdp_task_register_service_record>( a_task );
+
+    uint32_t handle = m_local_service.register_record( detail_tsk->m_service_record );
+
+    std::shared_ptr<executable_task> tsk;
+    tsk = std::make_shared<executable_task>();
+    tsk->set_source_module( sdp_module::s_sdp_module_name );
+    tsk->set_position( source_here );
+    tsk->set_fun( std::bind( detail_tsk->m_registered_callback, handle ), detail_tsk->m_callback_handle_module );
+    tsk->set_target_module( detail_tsk->m_callback_handle_module );
+
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+}
+
+void sdp_manager::handle_service_search( std::shared_ptr<sdp_task> const& a_task )
+{
+
+}
+
+void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task )
+{
+    auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>( a_task );
+
+    if( detail_tsk->m_service_uuid.empty() )
+    {
+        LogUtilError() << "sdp_service_search_attribute_req requires at least one service uuid";
+        return;
+    }
+
+    std::shared_ptr<sdp_service_search_attribute_req> request;
+    request = std::make_shared<sdp_service_search_attribute_req>();
+    request->m_matching_uuids = detail_tsk->m_service_uuid;
+    request->m_requested_id_ranges = detail_tsk->m_requested_id_ranges;
+    request->m_max_return_count = 0xFFFF;
+    request->m_matching_ids = detail_tsk->m_attribute_id_list;
+    request->m_remote_device = detail_tsk->m_remote_device;
+
+    auto conn_ = find_connection( detail_tsk->m_remote_device );
+    if( conn_ )
+    {
+        //todo : execute the resut
+    }
+    else
+    {
+        std::shared_ptr<l2cap_task_connection_request> tsk;
+        tsk = std::make_shared<l2cap_task_connection_request>();
+        tsk->m_remote_device = detail_tsk->m_remote_device;
+        tsk->m_psm = defined_l2cap_psm::sdp;
+        tsk->set_source_module( sdp_module::s_sdp_module_name );
+        tsk->set_position( source_here );
+
+        framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+
+        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
+        sdp_conn->m_address = detail_tsk->m_remote_device;
+        sdp_conn->set_connection_status( connection_status::connecting );
+        m_connections.push_back( sdp_conn );
+
+        m_pending_reqs.push_back( request );
+    }
+}
+
+void sdp_manager::send_packet
+    (
+    std::shared_ptr<sdp_protocol_base> const& a_packet,
+    bluetooth_address                         a_remote_address
+    )
+{
+    if( !a_packet )
+    {
+        LogUtilError() << "empty packet to send.";
+        return;
+    }
+
+    uint16_t local_cid = 0x00;
+    std::shared_ptr<hci_data> hci_packet;
+    size_t sdp_sdu_size = 0x00; // the SDP protocal data total length
+    uint8_t* p_sdp_sdu = nullptr;
+    size_t offset = 0;
+    sdp_header _sdp_header;
+
+    switch( a_packet->m_pdu_id )
+    {
+    case sdp_pdu_id::sdp_service_search_attr_rsp:
+    {
+        std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
+        rsp = std::static_pointer_cast<sdp_service_search_attribute_rsp>( a_packet );
+        local_cid = rsp->m_local_cid;
+        hci_packet = std::make_shared<hci_data>();
+
+        sdp_sdu_size = 2 + rsp->m_attribute_list.size() + 1 + rsp->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_attribute_list.size() ) );
+        offset += 2;
+        memcpy( p_sdp_sdu + offset, rsp->m_attribute_list.data(), rsp->m_attribute_list.size() );
+        offset += rsp->m_attribute_list.size();
+        p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( rsp->m_transaction_id );
+    }
+    break;
+    case sdp_pdu_id::sdp_service_search_attr_req:
+    {
+        std::shared_ptr<sdp_service_search_attribute_req> req;
+        req = std::static_pointer_cast<sdp_service_search_attribute_req>( a_packet );
+        for( auto& ele : m_connections )
+        {
+            if( ele->m_address == req->m_remote_device )
+            {
+                local_cid = ele->m_local_cid;
+                break;
+            }
+        }
+
+        hci_packet = std::make_shared<hci_data>();
+        /**
+         * todo: need handle request: sdp_pdu_id::sdp_service_search_attr_req.
+         */
+        LogUtilFatal( "need handle request: sdp_pdu_id::sdp_service_search_attr_req." );
+    }
+    break;
+    default:
+        LogUtilError() << "Packet type not handled to sent: " << a_packet->m_pdu_id;
+        break;
+    }
+
+    if( !hci_packet )
+    {
+        LogUtilDebug() << "No hci packet to send.";
+        return;
+    }
+
+    _sdp_header.set_sdu_length( static_cast<uint16_t>( sdp_sdu_size ) );
+    _sdp_header.set_pdu_id( a_packet->m_pdu_id );
+    _sdp_header.to_raw_buffer( hci_packet->m_buffer.data(), static_cast<uint32_t>( hci_packet->m_buffer.size() ) );
+
+    std::shared_ptr<l2cap_task_send_l2cap_sdu> tsk;
+    tsk = std::make_shared<l2cap_task_send_l2cap_sdu>();
+    tsk->m_hci_packet = hci_packet;
+    tsk->m_local_cid = local_cid;
+    tsk->set_source_module( sdp_module::s_sdp_module_name );
+    tsk->set_target_module( l2cap_module::s_l2cap_module_name );
+    tsk->set_position( source_here );
+    tsk->m_remote_address = a_remote_address;
+
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+}
+
+void sdp_manager::send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code )
+{
+
+}
+
+std::shared_ptr<sdp_connection> sdp_manager::find_connection( bluetooth_address const& a_address )
+{
+    for( auto& ele : m_connections )
+    {
+        if( ele->m_address == a_address )
+        {
+            return ele;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<sdp_connection> sdp_manager::find_connection
+    (
+    uint16_t a_acl_handle
+    )
+{
+    for( auto& ele : m_connections )
+    {
+        if( ele->match( a_acl_handle ) )
+        {
+            return ele;
+        }
+    }
+    return nullptr;
+}
+
+void sdp_manager::remove_connection( bluetooth_address const& a_address )
+{
+    for( auto it = m_connections.begin(); it != m_connections.end(); ++it )
+    {
+        if( ( *it )->m_address == a_address )
+        {
+            m_connections.erase( it );
+            break;
+        }
+    }
+}
+
+bool sdp_manager::verify_received_packet
+    (
+    sdp_header& a_sdp_header,
+    std::shared_ptr<hci_data> const& a_packet
+    )
+{
+    if( a_packet->m_buffer.size() < a_sdp_header.header_size() )
+    {
+        return false;
+    }
+
+    a_sdp_header.parse_from_raw_data( a_packet->m_buffer.data(),
+        static_cast<uint32_t>( a_packet->m_buffer.size() ) );
+
+    uint16_t parameter_size = a_sdp_header.get_parameters_length();
+
+    if( a_packet->m_buffer.size() < a_sdp_header.header_size() + parameter_size )
+    {
+        return false;
+    }
+
+    return true;
+}
+
 std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
     (
     sdp_header& a_sdp_header,
@@ -778,7 +1002,7 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
 std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request
     (
     sdp_header& a_sdp_header,
-    uint8_t*    a_parameter_buffer,
+    uint8_t* a_parameter_buffer,
     uint16_t    a_parameter_size
     )
 {
@@ -937,230 +1161,6 @@ std::shared_ptr<sdp_service_search_attribute_response> sdp_manager::parse_servic
     response->m_remote_device = alternative_result->m_remote_device;
 
     return response;
-}
-
-void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_task )
-{
-    auto detail_tsk = std::static_pointer_cast<sdp_task_register_service_record>( a_task );
-
-    uint32_t handle = m_local_service.register_record( detail_tsk->m_service_record );
-
-    std::shared_ptr<executable_task> tsk;
-    tsk = std::make_shared<executable_task>();
-    tsk->set_source_module( sdp_module::s_sdp_module_name );
-    tsk->set_position( source_here );
-    tsk->set_fun( std::bind( detail_tsk->m_registered_callback, handle ), detail_tsk->m_callback_handle_module );
-    tsk->set_target_module( detail_tsk->m_callback_handle_module );
-
-    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-}
-
-void sdp_manager::handle_service_search( std::shared_ptr<sdp_task> const& a_task )
-{
-
-}
-
-void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task )
-{
-    auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>( a_task );
-
-    if( detail_tsk->m_service_uuid.empty() )
-    {
-        LogUtilError() << "sdp_service_search_attribute_req requires at least one service uuid";
-        return;
-    }
-
-    std::shared_ptr<sdp_service_search_attribute_req> request;
-    request = std::make_shared<sdp_service_search_attribute_req>();
-    request->m_matching_uuids = detail_tsk->m_service_uuid;
-    request->m_requested_id_ranges = detail_tsk->m_requested_id_ranges;
-    request->m_max_return_count = 0xFFFF;
-    request->m_matching_ids = detail_tsk->m_attribute_id_list;
-    request->m_remote_device = detail_tsk->m_remote_device;
-
-    auto conn_ = find_connection( detail_tsk->m_remote_device );
-    if( conn_ )
-    {
-        //todo : execute the resut
-    }
-    else
-    {
-        std::shared_ptr<l2cap_task_connection_request> tsk;
-        tsk = std::make_shared<l2cap_task_connection_request>();
-        tsk->m_remote_device = detail_tsk->m_remote_device;
-        tsk->m_psm = defined_l2cap_psm::sdp;
-        tsk->set_source_module( sdp_module::s_sdp_module_name );
-        tsk->set_position( source_here );
-
-        framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-
-        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
-        sdp_conn->m_address = detail_tsk->m_remote_device;
-        sdp_conn->set_connection_status( connection_status::connecting );
-        m_connections.push_back( sdp_conn );
-
-        m_pending_reqs.push_back( request );
-    }
-}
-
-void sdp_manager::send_packet
-    (
-    std::shared_ptr<sdp_protocol_base> const& a_packet,
-    bluetooth_address                         a_remote_address
-    )
-{
-    if( !a_packet )
-    {
-        LogUtilError() << "empty packet to send.";
-        return;
-    }
-
-    uint16_t local_cid = 0x00;
-    std::shared_ptr<hci_data> hci_packet;
-    size_t sdp_sdu_size = 0x00; // the SDP protocal data total length
-    uint8_t* p_sdp_sdu = nullptr;
-    size_t offset = 0;
-    sdp_header _sdp_header;
-
-    switch( a_packet->m_pdu_id )
-    {
-    case sdp_pdu_id::sdp_service_search_attr_rsp:
-    {
-        std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
-        rsp = std::static_pointer_cast<sdp_service_search_attribute_rsp>( a_packet );
-        local_cid = rsp->m_local_cid;
-        hci_packet = std::make_shared<hci_data>();
-
-        sdp_sdu_size = 2 + rsp->m_attribute_list.size() + 1 + rsp->m_continue_info.size();
-        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
-        hci_packet->m_buffer.resize( hci_total_size );
-
-        // fill the sdp sdu field.
-        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
-        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_attribute_list.size() ) );
-        offset += 2;
-        memcpy( p_sdp_sdu + offset, rsp->m_attribute_list.data(), rsp->m_attribute_list.size() );
-        offset += rsp->m_attribute_list.size();
-        p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
-        offset += 1;
-        memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
-
-        _sdp_header.set_transcation_id( rsp->m_transaction_id );
-    }
-    break;
-    case sdp_pdu_id::sdp_service_search_attr_req:
-    {
-        std::shared_ptr<sdp_service_search_attribute_req> req;
-        req = std::static_pointer_cast<sdp_service_search_attribute_req>( a_packet );
-        for( auto& ele : m_connections )
-        {
-            if( ele->m_address == req->m_remote_device )
-            {
-                local_cid = ele->m_local_cid;
-                break;
-            }
-        }
-
-        hci_packet = std::make_shared<hci_data>();
-        /**
-         * todo: need handle request: sdp_pdu_id::sdp_service_search_attr_req.
-         */
-        LogUtilFatal( "need handle request: sdp_pdu_id::sdp_service_search_attr_req." );
-    }
-    break;
-    default:
-        LogUtilError() << "Packet type not handled to sent: " << a_packet->m_pdu_id;
-        break;
-    }
-
-    if( !hci_packet )
-    {
-        LogUtilDebug() << "No hci packet to send.";
-        return;
-    }
-
-    _sdp_header.set_sdu_length( static_cast<uint16_t>( sdp_sdu_size ) );
-    _sdp_header.set_pdu_id( a_packet->m_pdu_id );
-    _sdp_header.to_raw_buffer( hci_packet->m_buffer.data(), static_cast<uint32_t>( hci_packet->m_buffer.size() ) );
-
-    std::shared_ptr<l2cap_task_send_l2cap_sdu> tsk;
-    tsk = std::make_shared<l2cap_task_send_l2cap_sdu>();
-    tsk->m_hci_packet = hci_packet;
-    tsk->m_local_cid = local_cid;
-    tsk->set_source_module( sdp_module::s_sdp_module_name );
-    tsk->set_target_module( l2cap_module::s_l2cap_module_name );
-    tsk->set_position( source_here );
-    tsk->m_remote_address = a_remote_address;
-
-    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-}
-
-void sdp_manager::send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code )
-{
-
-}
-
-bool sdp_manager::verify_received_packet
-    (
-    sdp_header& a_sdp_header,
-    std::shared_ptr<hci_data> const& a_packet
-    )
-{
-    if( a_packet->m_buffer.size() < a_sdp_header.header_size() )
-    {
-        return false;
-    }
-
-    a_sdp_header.parse_from_raw_data( a_packet->m_buffer.data(),
-        static_cast<uint32_t>( a_packet->m_buffer.size() ) );
-
-    uint16_t parameter_size = a_sdp_header.get_parameters_length();
-
-    if( a_packet->m_buffer.size() < a_sdp_header.header_size() + parameter_size )
-    {
-        return false;
-    }
-
-    return true;
-}
-
-std::shared_ptr<sdp_connection> sdp_manager::find_connection( bluetooth_address const& a_address )
-{
-    for( auto& ele : m_connections )
-    {
-        if( ele->m_address == a_address )
-        {
-            return ele;
-        }
-    }
-    return nullptr;
-}
-
-std::shared_ptr<sdp_connection> sdp_manager::find_connection
-    (
-    uint16_t a_acl_handle
-    )
-{
-    for( auto& ele : m_connections )
-    {
-        if( ele->match( a_acl_handle ) )
-        {
-            return ele;
-        }
-    }
-    return nullptr;
-}
-
-void sdp_manager::remove_connection( bluetooth_address const& a_address )
-{
-    for( auto it = m_connections.begin(); it != m_connections.end(); ++it )
-    {
-        if( ( *it )->m_address == a_address )
-        {
-            m_connections.erase( it );
-            break;
-        }
-    }
 }
 
 }

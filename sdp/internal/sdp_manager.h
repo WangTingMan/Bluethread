@@ -65,6 +65,40 @@ public:
 
     void handle_sdu( std::shared_ptr<hci_data> );
 
+    void handle_register_record( std::shared_ptr<sdp_task> const& a_task );
+
+    void handle_service_search( std::shared_ptr<sdp_task> const& a_task );
+
+    /**
+     * Handle the service search attribute request from upper layer
+     */
+    void handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task );
+
+    void send_packet
+        (
+        std::shared_ptr<sdp_protocol_base> const& a_packet,
+        bluetooth_address                           a_remote_address
+        );
+
+    void send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code );
+
+    std::shared_ptr<sdp_connection> find_connection( bluetooth_address const& a_address );
+
+    std::shared_ptr<sdp_connection> find_connection
+        (
+        uint16_t a_acl_handle
+        );
+
+    void remove_connection( bluetooth_address const& a_address );
+
+private:
+
+    bool verify_received_packet
+        (
+        sdp_header& a_sdp_header,
+        std::shared_ptr<hci_data> const& a_packet
+        );
+
     std::shared_ptr<sdp_error_rsp> parse_error_rsp
         (
         sdp_header& a_sdp_header,
@@ -113,40 +147,6 @@ public:
         uint8_t* a_parameter_buffer,
         uint16_t a_parameter_size
         );
-
-    void handle_register_record( std::shared_ptr<sdp_task> const& a_task );
-
-    void handle_service_search( std::shared_ptr<sdp_task> const& a_task );
-
-    /**
-     * Handle the service search attribute request from upper layer
-     */
-    void handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task );
-
-    void send_packet
-        (
-        std::shared_ptr<sdp_protocol_base> const& a_packet,
-        bluetooth_address                           a_remote_address
-        );
-
-    void send_error_rsp( uint16_t a_acl_handle, sdp_error_code a_code );
-
-    bool verify_received_packet
-        (
-        sdp_header& a_sdp_header,
-        std::shared_ptr<hci_data> const& a_packet
-        );
-
-    std::shared_ptr<sdp_connection> find_connection( bluetooth_address const& a_address );
-
-    std::shared_ptr<sdp_connection> find_connection
-        (
-        uint16_t a_acl_handle
-        );
-
-    void remove_connection( bluetooth_address const& a_address );
-
-private:
 
     sdp_server m_local_service;
     std::vector<std::shared_ptr<sdp_connection>> m_connections;

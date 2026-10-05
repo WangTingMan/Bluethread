@@ -346,6 +346,9 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
+        {
+            auto response = parse_service_attribute_response( _sdp_header, _parameter_buffer, _parameter_size );
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_req:
         {
@@ -354,8 +357,12 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_rsp:
+        {
+            auto response = parse_service_search_attribute_response( _sdp_header, _parameter_buffer, _parameter_size );
+        }
         break;
     default:
+        send_error_rsp( _l2cap_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         break;
     }
 }
@@ -687,6 +694,87 @@ std::shared_ptr<sdp_service_attribute_request> sdp_manager::parse_service_attrib
     return request;
 }
 
+std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attribute_response
+    (
+    sdp_header& a_sdp_header,
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
+    )
+{
+    std::shared_ptr<sdp_service_attribute_response> response;
+    bool status = false;
+    uint16_t parameter_size = a_parameter_size;
+    uint16_t transaction_id = a_sdp_header.get_transaction_id();
+    uint32_t parsed_size = 0;
+    uint8_t* p_buffer = a_parameter_buffer;
+    uint32_t size_left = parameter_size;
+
+    uint32_t attribute_list_size = 0;
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return response;
+    }
+    attribute_list_size = be_to_host16( p_buffer );
+    parsed_size = 2;
+    p_buffer += parsed_size;
+    size_left -= parsed_size;
+
+    if( size_left < attribute_list_size )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return response;
+    }
+    std::vector<sdp_data_element> attribute_list;
+    uint32_t max_elements_size_to_parse = 50;
+    status = sdp_data_element::parse_elements_from( p_buffer, size_left, max_elements_size_to_parse, attribute_list );
+    if( !status )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return response;
+    }
+    parsed_size = attribute_list_size;
+    p_buffer += parsed_size;
+    size_left -= parsed_size;
+
+    std::vector<uint8_t> continue_state;
+    uint16_t continue_state_size = 0;
+    if( size_left < 1 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return response;
+    }
+    continue_state_size = p_buffer[0];
+    if( continue_state_size > 16 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+        return response;
+    }
+    parsed_size = 1;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    if( continue_state_size > 0 )
+    {
+        if( size_left < continue_state_size )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+            return response;
+        }
+        continue_state.resize( continue_state_size );
+        memcpy( continue_state.data(), p_buffer, continue_state_size );
+    }
+
+    response = std::make_shared<sdp_service_attribute_response>();
+    response->m_attribute_list = attribute_list;
+    response->m_continue_info = continue_state;
+    response->m_attribute_list_byte_count = attribute_list_size;
+    response->m_transaction_id = transaction_id;
+    response->m_local_cid = a_sdp_header.get_channel_id();
+    response->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
+
+    return response;
+}
+
 std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request
     (
     sdp_header& a_sdp_header,
@@ -824,6 +912,31 @@ std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_sea
     request->m_local_cid = a_sdp_header.get_channel_id();
     request->m_remote_device = remote_device;
     return request;
+}
+
+std::shared_ptr<sdp_service_search_attribute_response> sdp_manager::parse_service_search_attribute_response
+    (
+    sdp_header& a_sdp_header,
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
+    )
+{
+    auto alternative_result = parse_service_attribute_response( a_sdp_header, a_parameter_buffer, a_parameter_size );
+    if( !alternative_result )
+    {
+        return nullptr;
+    }
+
+    std::shared_ptr<sdp_service_search_attribute_response> response;
+    response = std::make_shared<sdp_service_search_attribute_response>();
+    response->m_attribute_list = alternative_result->m_attribute_list;
+    response->m_continue_info = alternative_result->m_continue_info;
+    response->m_attribute_list_byte_count = alternative_result->m_attribute_list_byte_count;
+    response->m_transaction_id = alternative_result->m_transaction_id;
+    response->m_local_cid = alternative_result->m_local_cid;
+    response->m_remote_device = alternative_result->m_remote_device;
+
+    return response;
 }
 
 void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_task )

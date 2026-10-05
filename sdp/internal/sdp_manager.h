@@ -93,7 +93,21 @@ public:
         uint16_t a_parameter_size
         );
 
+    std::shared_ptr<sdp_service_attribute_response> parse_service_attribute_response
+        (
+        sdp_header& a_sdp_header,
+        uint8_t* a_parameter_buffer,
+        uint16_t a_parameter_size
+        );
+
     std::shared_ptr<sdp_service_search_attribute_req> parse_service_search_attribute_request
+        (
+        sdp_header& a_sdp_header,
+        uint8_t* a_parameter_buffer,
+        uint16_t a_parameter_size
+        );
+
+    std::shared_ptr<sdp_service_search_attribute_response> parse_service_search_attribute_response
         (
         sdp_header& a_sdp_header,
         uint8_t* a_parameter_buffer,

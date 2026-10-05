@@ -173,6 +173,21 @@ public:
     std::vector<uint8_t> m_continue_info;
 };
 
+class sdp_service_attribute_response : public sdp_protocol_base
+{
+
+public:
+
+    sdp_service_attribute_response()
+    {
+        m_pdu_id = sdp_pdu_id::sdp_service_attr_rsp;
+    }
+
+    uint16_t m_attribute_list_byte_count = 0;
+    std::vector<sdp_data_element> m_attribute_list;
+    std::vector<uint8_t> m_continue_info;
+};
+
 class sdp_service_search_attribute_req : public sdp_protocol_base
 {
 
@@ -188,6 +203,21 @@ public:
     std::vector<uint16_t> m_matching_ids;// the ids to matching
     std::vector<std::pair<uint16_t, uint16_t>> m_requested_id_ranges; // the id ranges to matching
     std::vector<uint8_t> m_continue_info;// continue information
+};
+
+class sdp_service_search_attribute_response : public sdp_protocol_base
+{
+
+public:
+
+    sdp_service_search_attribute_response()
+    {
+        m_pdu_id = sdp_pdu_id::sdp_service_search_attr_rsp;
+    }
+
+    uint16_t m_attribute_list_byte_count = 0;
+    std::vector<sdp_data_element> m_attribute_list;
+    std::vector<uint8_t> m_continue_info;
 };
 
 class sdp_service_search_attribute_rsp : public sdp_protocol_base

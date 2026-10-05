@@ -156,6 +156,23 @@ public:
     std::vector<uint8_t> m_continue_info;
 };
 
+class sdp_service_attribute_request : public sdp_protocol_base
+{
+
+public:
+
+    sdp_service_attribute_request()
+    {
+        m_pdu_id = sdp_pdu_id::sdp_service_attr_req;
+    }
+
+    uint32_t m_service_record_handle = 0;
+    uint16_t m_max_attribute_count = 0;
+    std::vector<uint16_t> m_matching_ids;
+    std::vector<std::pair<uint16_t, uint16_t>> m_requested_id_ranges;
+    std::vector<uint8_t> m_continue_info;
+};
+
 class sdp_service_search_attribute_req : public sdp_protocol_base
 {
 

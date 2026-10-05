@@ -340,6 +340,10 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_req:
+        {
+            auto request = parse_service_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
+
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
         break;
@@ -564,6 +568,123 @@ std::shared_ptr<sdp_service_search_response> sdp_manager::parse_service_search_r
     rsp->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
 
     return rsp;
+}
+
+std::shared_ptr<sdp_service_attribute_request> sdp_manager::parse_service_attribute_request
+    (
+    sdp_header& a_sdp_header,
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
+    )
+{
+    bool status = false;
+    std::shared_ptr<sdp_service_attribute_request> request;
+    uint16_t parameter_size = a_parameter_size;
+    uint16_t transaction_id = a_sdp_header.get_transaction_id();
+    uint32_t parsed_size = 0;
+    uint8_t* p_buffer = a_parameter_buffer;
+    uint32_t size_left = parameter_size;
+    sdp_data_element element;
+
+    if( a_parameter_size < 4 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    uint32_t record_handle = be_to_host32( p_buffer );
+    parsed_size = 4;
+    p_buffer += parsed_size;
+    size_left -= parsed_size;
+
+    uint16_t max_attribute_bytes_count = 0;
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    max_attribute_bytes_count = be_to_host16( p_buffer );
+    if( max_attribute_bytes_count < 7 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    parsed_size = 2;
+    p_buffer += parsed_size;
+    size_left -= parsed_size;
+
+    std::vector<uint16_t> requested_ids;
+    std::vector<std::pair<uint16_t, uint16_t>> requested_id_ranges;
+    status = sdp_data_element::parse_from( p_buffer, size_left, parsed_size, element );
+    if( !status )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    if( !element.can_as_elements() )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    std::vector<sdp_data_element> id_elements = element.get_elements();
+    for( auto& ele : id_elements )
+    {
+        uint16_t id16 = 0;
+        uint32_t id32 = 0;
+        if( ele.can_as_uint16() )
+        {
+            id16 = ele.get_uint16_value();
+            requested_ids.push_back( id16 );
+            continue;
+        }
+        if( ele.can_as_uint32() )
+        {
+            id32 = ele.get_uint32_value();
+            uint16_t high16 = id32 >> 16;
+            uint16_t low16 = id32 & 0xFFFF;
+            requested_id_ranges.push_back( std::make_pair( high16, low16 ) );
+        }
+    }
+    p_buffer += parsed_size;
+    size_left -= parsed_size;
+
+    std::vector<uint8_t> continue_state;
+    uint16_t continue_state_size = 0;
+    if( size_left < 1 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    continue_state_size = p_buffer[0];
+    if( continue_state_size > 16 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+        return request;
+    }
+    parsed_size = 1;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    if( continue_state_size > 0 )
+    {
+        if( size_left < continue_state_size )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+            return request;
+        }
+        continue_state.resize( continue_state_size );
+        memcpy( continue_state.data(), p_buffer, continue_state_size );
+    }
+
+    request = std::make_shared<sdp_service_attribute_request>();
+    request->m_service_record_handle = record_handle;
+    request->m_max_attribute_count = max_attribute_bytes_count;
+    request->m_matching_ids = requested_ids;
+    request->m_requested_id_ranges = requested_id_ranges;
+    request->m_continue_info = continue_state;
+    request->m_transaction_id = transaction_id;
+    request->m_local_cid = a_sdp_header.get_channel_id();
+    request->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
+
+    return request;
 }
 
 std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request

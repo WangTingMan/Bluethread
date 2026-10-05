@@ -341,7 +341,10 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_req:
-        handle_service_search_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
+        {
+            auto request = parse_service_search_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
+            m_local_service.handle_service_search_attribute_request( request );
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_rsp:
         break;
@@ -420,13 +423,14 @@ std::shared_ptr<sdp_servbice_search_req> sdp_manager::parse_service_search_reque
     return req;
 }
 
-void sdp_manager::handle_service_search_attribute_request
+std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request
     (
     sdp_header& a_sdp_header,
     uint8_t*    a_parameter_buffer,
     uint16_t    a_parameter_size
     )
 {
+    std::shared_ptr<sdp_service_search_attribute_req> request;
     bool status = false;
     uint8_t* p_buffer = a_parameter_buffer;
     uint16_t parameter_size = a_parameter_size;
@@ -442,12 +446,12 @@ void sdp_manager::handle_service_search_attribute_request
     if( !status )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     if( !element.can_as_elements() )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     uuid_elements = element.get_elements();
     for( auto& ele : uuid_elements )
@@ -455,14 +459,14 @@ void sdp_manager::handle_service_search_attribute_request
         if( !ele.can_as_uuid() )
         {
             send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-            return;
+            return request;
         }
         uuids.push_back( ele.get_uuid() );
     }
     if( uuids.empty() || uuids.size() > 12 )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
 
     size_left -= parsed_size;
@@ -471,7 +475,7 @@ void sdp_manager::handle_service_search_attribute_request
     if( size_left < 2 )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     max_attribute_bytes_count = be_to_host16( p_buffer );
     parsed_size = 2;
@@ -485,12 +489,12 @@ void sdp_manager::handle_service_search_attribute_request
     if( !status )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     if( !element.can_as_elements() )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     id_elements = element.get_elements();
     for( auto& ele : id_elements )
@@ -520,13 +524,13 @@ void sdp_manager::handle_service_search_attribute_request
     if( size_left < 1 )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
-        return;
+        return request;
     }
     continue_state_size = p_buffer[0];
     if( continue_state_size > 16 )
     {
         send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
-        return;
+        return request;
     }
     parsed_size = 1;
     size_left -= parsed_size;
@@ -536,7 +540,7 @@ void sdp_manager::handle_service_search_attribute_request
         if( size_left < continue_state_size )
         {
             send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
-            return;
+            return request;
         }
         continue_state.resize( continue_state_size );
         memcpy( continue_state.data(), p_buffer, continue_state_size );
@@ -547,7 +551,6 @@ void sdp_manager::handle_service_search_attribute_request
     uint16_t acl_handle = a_sdp_header.get_acl_handle();
     auto [remote_device, has] = acl_db->get_address( acl_handle );
 
-    std::shared_ptr<sdp_service_search_attribute_req> request;
     request = std::make_shared<sdp_service_search_attribute_req>();
     request->m_matching_uuids = uuids;
     request->m_max_return_count = max_attribute_bytes_count;
@@ -556,7 +559,7 @@ void sdp_manager::handle_service_search_attribute_request
     request->m_continue_info = continue_state;
     request->m_local_cid = a_sdp_header.get_channel_id();
     request->m_remote_device = remote_device;
-    m_local_service.handle_service_search_attribute_request( request );
+    return request;
 }
 
 void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_task )
@@ -640,6 +643,7 @@ void sdp_manager::send_packet
     size_t sdp_sdu_size = 0x00; // the SDP protocal data total length
     uint8_t* p_sdp_sdu = nullptr;
     size_t offset = 0;
+    sdp_header _sdp_header;
 
     switch( a_packet->m_pdu_id )
     {
@@ -651,11 +655,11 @@ void sdp_manager::send_packet
         hci_packet = std::make_shared<hci_data>();
 
         sdp_sdu_size = 2 + rsp->m_attribute_list.size() + 1 + rsp->m_continue_info.size();
-        size_t hci_total_size = m_sdp_header.header_size() + sdp_sdu_size;
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
         hci_packet->m_buffer.resize( hci_total_size );
 
         // fill the sdp sdu field.
-        p_sdp_sdu = hci_packet->m_buffer.data() + m_sdp_header.header_size();
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
         write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_attribute_list.size() ) );
         offset += 2;
         memcpy( p_sdp_sdu + offset, rsp->m_attribute_list.data(), rsp->m_attribute_list.size() );
@@ -664,7 +668,7 @@ void sdp_manager::send_packet
         offset += 1;
         memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
 
-        m_sdp_header.set_transcation_id( rsp->m_transaction_id );
+        _sdp_header.set_transcation_id( rsp->m_transaction_id );
     }
     break;
     case sdp_pdu_id::sdp_service_search_attr_req:
@@ -698,9 +702,9 @@ void sdp_manager::send_packet
         return;
     }
 
-    m_sdp_header.set_sdu_length( static_cast<uint16_t>( sdp_sdu_size ) );
-    m_sdp_header.set_pdu_id( a_packet->m_pdu_id );
-    m_sdp_header.to_raw_buffer( hci_packet->m_buffer.data(), static_cast<uint32_t>( hci_packet->m_buffer.size() ) );
+    _sdp_header.set_sdu_length( static_cast<uint16_t>( sdp_sdu_size ) );
+    _sdp_header.set_pdu_id( a_packet->m_pdu_id );
+    _sdp_header.to_raw_buffer( hci_packet->m_buffer.data(), static_cast<uint32_t>( hci_packet->m_buffer.size() ) );
 
     std::shared_ptr<l2cap_task_send_l2cap_sdu> tsk;
     tsk = std::make_shared<l2cap_task_send_l2cap_sdu>();

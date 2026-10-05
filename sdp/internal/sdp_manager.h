@@ -78,7 +78,7 @@ public:
         uint16_t a_parameter_size
         );
 
-    void handle_service_search_attribute_request
+    std::shared_ptr<sdp_service_search_attribute_req> parse_service_search_attribute_request
         (
         sdp_header& a_sdp_header,
         uint8_t* a_parameter_buffer,
@@ -120,7 +120,6 @@ public:
 private:
 
     sdp_server m_local_service;
-    sdp_header m_sdp_header;
     std::vector<std::shared_ptr<sdp_connection>> m_connections;
     std::vector<std::shared_ptr<sdp_protocol_base>> m_pending_reqs;
 

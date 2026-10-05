@@ -322,7 +322,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     {
     case bluetooth::sdp_pdu_id::sdp_error_rsp:
         {
-            auto error_rsp = parse_error_rsp( _sdp_header, a_sdu );
+            auto error_rsp = parse_error_rsp( _sdp_header, _parameter_buffer, _parameter_size );
             if( error_rsp )
             {
                 sdp_con->handle_error_rsp( _sdp_header, error_rsp );
@@ -356,71 +356,123 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
 std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
     (
     sdp_header& a_sdp_header,
-    std::shared_ptr<hci_data> const& a_hci_data
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
     )
 {
     std::shared_ptr<sdp_error_rsp> error_rsp;
-    uint8_t* p_buffer = a_hci_data->m_buffer.data() + a_sdp_header.header_size();
-    int32_t size_left = static_cast<int32_t>( a_hci_data->m_buffer.size() )
-        - static_cast<int32_t>( a_sdp_header.header_size() );
-
-    uint32_t value_size = 0;
-    bool ret = sdp_data_element::recognite_data_element( p_buffer, size_left, value_size );
-    if( !ret )
-    {
-        LogUtilError() << "Invalid error rsp packet, cannot recognite data element";
-        return error_rsp;
-    }
-
-    if( value_size != 0x02 )
-    {
-        LogUtilError() << "Invalid error rsp packet, value length: "
-            << value_size;
-        return error_rsp;
-    }
-
-    sdp_data_element value;
-    uint32_t parsed_size = 0;
-    auto parse_ret = sdp_data_element::parse_from( p_buffer, value_size, parsed_size, value );
-    if( !parse_ret )
-    {
-        LogUtilError() << "Invalid error rsp packet, cannot parse data element";
-        return error_rsp;
-    }
+    uint8_t* p_buffer = a_parameter_buffer;
+    int32_t size_left = a_parameter_size;
 
     uint16_t error_code = 0;
-    if( value.can_as_uint16() )
+    if( size_left < 2 )
     {
-        error_code = value.get_uint16_value();
-    }
-    else
-    {
-        LogUtilError() << "Invalid error rsp packet, cannot get error code";
+        LogUtilError() << "Invalid error rsp packet, size left: " << size_left;
         return error_rsp;
     }
+    error_code = be_to_host16( p_buffer );
 
     error_rsp = std::make_shared<sdp_error_rsp>();
     error_rsp->m_error_code = static_cast<sdp_error_code>( error_code );
     error_rsp->m_transaction_id = a_sdp_header.get_transaction_id();
     error_rsp->m_local_cid = a_sdp_header.get_channel_id();
+    error_rsp->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
     return error_rsp;
 }
 
-std::shared_ptr<sdp_servbice_search_req> sdp_manager::parse_service_search_request
+std::shared_ptr<sdp_service_search_request> sdp_manager::parse_service_search_request
     (
     sdp_header& a_sdp_header,
     uint8_t* a_parameter_buffer,
     uint16_t a_parameter_size
     )
 {
-    std::shared_ptr<sdp_servbice_search_req> req;
-
-    uint8_t* p_sdp_header = a_parameter_buffer - 5;
-    uint8_t* p_sdu = a_parameter_buffer;
+    bool status = false;
+    std::shared_ptr<sdp_service_search_request> request;
     uint16_t parameter_size = a_parameter_size;
     uint16_t transaction_id = a_sdp_header.get_transaction_id();
+    uint32_t parsed_size = 0;
+    uint8_t* p_buffer = a_parameter_buffer;
+    uint32_t size_left = parameter_size;
+    sdp_data_element element;
 
-    return req;
+    std::vector<sdp_data_element> uuid_elements;
+    std::vector<uuid> uuids;
+    status = sdp_data_element::parse_from( p_buffer, size_left, parsed_size, element );
+    if( !status )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    if( !element.can_as_elements() )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    uuid_elements = element.get_elements();
+    for( auto& ele : uuid_elements )
+    {
+        if( !ele.can_as_uuid() )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+            return request;
+        }
+        uuids.push_back( ele.get_uuid() );
+    }
+    if( uuids.size() < 1 || uuids.size() > 12 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+
+    uint16_t max_return_count = 0;
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    parsed_size = 2;
+    max_return_count = be_to_host16( p_buffer );
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+
+    std::vector<uint8_t> continue_state;
+    uint16_t continue_state_size = 0;
+    if( size_left < 1 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return request;
+    }
+    continue_state_size = p_buffer[0];
+    if( continue_state_size > 16 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+        return request;
+    }
+    parsed_size = 1;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    if( continue_state_size > 0 )
+    {
+        if( size_left < continue_state_size )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+            return request;
+        }
+        continue_state.resize( continue_state_size );
+        memcpy( continue_state.data(), p_buffer, continue_state_size );
+    }
+
+    request = std::make_shared<sdp_service_search_request>();
+    request->m_matching_uuids = uuids;
+    request->m_max_return_count = max_return_count;
+    request->m_continue_info = continue_state;
+    request->m_transaction_id = transaction_id;
+    request->m_local_cid = a_sdp_header.get_channel_id();
+    request->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
+    return request;
 }
 
 std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request

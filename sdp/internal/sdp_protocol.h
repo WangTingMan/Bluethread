@@ -125,12 +125,12 @@ public:
     sdp_error_code m_error_code = sdp_error_code::reserve_code;
 };
 
-class sdp_servbice_search_req : public sdp_protocol_base
+class sdp_service_search_request : public sdp_protocol_base
 {
 
 public:
 
-    sdp_servbice_search_req()
+    sdp_service_search_request()
     {
         m_pdu_id = sdp_pdu_id::sdp_service_search_req;
     }

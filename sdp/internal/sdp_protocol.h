@@ -140,6 +140,22 @@ public:
     std::vector<uint8_t> m_continue_info;
 };
 
+class sdp_service_search_response : public sdp_protocol_base
+{
+
+public:
+
+    sdp_service_search_response()
+    {
+        m_pdu_id = sdp_pdu_id::sdp_service_search_rsp;
+    }
+
+    uint16_t m_total_record_count = 0;
+    uint16_t m_return_record_count = 0;
+    std::vector<uint32_t> m_matched_record_handles;
+    std::vector<uint8_t> m_continue_info;
+};
+
 class sdp_service_search_attribute_req : public sdp_protocol_base
 {
 

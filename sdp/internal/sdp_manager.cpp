@@ -335,6 +335,9 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_rsp:
+        {
+            auto rsp = parse_service_search_response( _sdp_header, _parameter_buffer, _parameter_size );
+        }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_req:
         break;
@@ -473,6 +476,94 @@ std::shared_ptr<sdp_service_search_request> sdp_manager::parse_service_search_re
     request->m_local_cid = a_sdp_header.get_channel_id();
     request->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
     return request;
+}
+
+std::shared_ptr<sdp_service_search_response> sdp_manager::parse_service_search_response
+    (
+    sdp_header& a_sdp_header,
+    uint8_t* a_parameter_buffer,
+    uint16_t a_parameter_size
+    )
+{
+    std::shared_ptr<sdp_service_search_response> rsp;
+    uint8_t* p_buffer = a_parameter_buffer;
+    uint32_t size_left = a_parameter_size;
+    uint32_t parsed_size = 0;
+    uint16_t transaction_id = a_sdp_header.get_transaction_id();
+
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return rsp;
+    }
+    uint16_t total_record_count = be_to_host16( p_buffer );
+    parsed_size = 2;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+
+    if( size_left < 2 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return rsp;
+    }
+    uint16_t return_record_count = be_to_host16( p_buffer );
+    parsed_size = 2;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+
+    uint32_t record_list_size = return_record_count;
+    std::vector<uint32_t> record_handles;
+    if( size_left < record_list_size * sizeof( uint32_t ) )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return rsp;
+    }
+    for( int i = 0; i < record_list_size; ++i )
+    {
+        uint32_t record_handle = be_to_host32( p_buffer );
+        record_handles.push_back( record_handle );
+        parsed_size += sizeof( uint32_t );
+        size_left -= sizeof( uint32_t );
+        p_buffer += sizeof( uint32_t );
+    }
+
+    std::vector<uint8_t> continue_state;
+    uint16_t continue_state_size = 0;
+    if( size_left < 1 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
+        return rsp;
+    }
+    continue_state_size = p_buffer[0];
+    if( continue_state_size > 16 )
+    {
+        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+        return rsp;
+    }
+    parsed_size = 1;
+    size_left -= parsed_size;
+    p_buffer += parsed_size;
+    if( continue_state_size > 0 )
+    {
+        if( size_left < continue_state_size )
+        {
+            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
+            return rsp;
+        }
+        continue_state.resize( continue_state_size );
+        memcpy( continue_state.data(), p_buffer, continue_state_size );
+    }
+
+    rsp = std::make_shared<sdp_service_search_response>();
+    rsp->m_total_record_count = total_record_count;
+    rsp->m_return_record_count = return_record_count;
+    rsp->m_matched_record_handles = record_handles;
+    rsp->m_continue_info = continue_state;
+    rsp->m_transaction_id = transaction_id;
+    rsp->m_local_cid = a_sdp_header.get_channel_id();
+    rsp->m_remote_device = find_connection( a_sdp_header.get_acl_handle() )->m_address;
+
+    return rsp;
 }
 
 std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_search_attribute_request

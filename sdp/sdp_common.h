@@ -28,12 +28,16 @@ namespace bluetooth
 
 namespace sdp_universal_attribute_id
 {
+    /**
+     * The definition of `sdp_universal_attribute_id` can be found in Chapter 5
+     * of the SDP specification. Refer to section 5.1.5 of the assigned numbers
+     * document for specific values.
+     */
     constexpr uint16_t service_record_handle = 0x0000;
     constexpr uint16_t service_class_id_list = 0x0001;
     constexpr uint16_t service_record_state = 0x0002;
     constexpr uint16_t service_id = 0x0003;
     constexpr uint16_t protocol_descriptor_list = 0x0004;
-    constexpr uint16_t addticional_protocol_descriptor_list = 0x000D;
     constexpr uint16_t browse_group_list = 0x0005;
     constexpr uint16_t language_base_attribute_id_list = 0x0006;
     constexpr uint16_t service_info_time_to_line = 0x0007;
@@ -42,26 +46,26 @@ namespace sdp_universal_attribute_id
     constexpr uint16_t documentation_url = 0x000A;
     constexpr uint16_t client_executable_url = 0x000B;
     constexpr uint16_t icon_url = 0x000C;
+    constexpr uint16_t addticional_protocol_descriptor_list = 0x000D;
 
+}
+
+/**
+ * Refers to SDP profile's section 5.1.15 to section 5.1.17, which defines the attribute
+ * IDs for service name, service description, and provider name.
+ * These values are from Assigned Numbers, section 5.2.
+ */
+namespace attribute_id_offset_for_string
+{
     constexpr uint16_t service_name_offset = 0x0000;
     constexpr uint16_t service_description_offset = 0x0001;
     constexpr uint16_t provider_name_offset = 0x0002;
-};
+}
 
 namespace sdp_self_attribute_id
 {
     constexpr uint16_t version_number_list = 0x0200;
     constexpr uint16_t service_database_state = 0x0201;
-}
-
-namespace did_attribute_id
-{
-    constexpr uint16_t specification_id = 0x0200;
-    constexpr uint16_t vendor_id = 0x0201;
-    constexpr uint16_t product_id = 0x0202;
-    constexpr uint16_t version = 0x0203;
-    constexpr uint16_t primary_record = 0x0204;
-    constexpr uint16_t vendor_id_source = 0x0205;
 }
 
 namespace sdp_service_uuid
@@ -138,389 +142,6 @@ enum class sdp_attribute_value_type : uint8_t
     alternative_data_element = 0x07,
     url = 0x08,
 };
-
-class sdp_data_element
-{
-
-public:
-
-    /**
-     * @brief Parse a single SDP DataElement from the input raw buffer
-     *
-     * @param a_buffer Pointer to the raw input buffer containing SDP DataElement binary data
-     * @param a_size Total available byte length of the input buffer
-     * @param a_parsed_size [OUT] If parsing succeeds, stores total bytes consumed by this single DataElement
-     *        (DE header + length field + payload). If parsing fails, this output value is undefined.
-     * @param a_value [OUT] Parsed SDP DataElement result.
-     *        If parsing fails, this output value is undefined.
-     * @param a_depth Current nesting depth of this DataElement.
-     *        Increment this value when recursively parsing child elements inside Sequence / Alternative.
-     * @param a_max_depth Maximum allowed nesting depth for SDP DataElement.
-     *        Parsing returns false immediately if a_depth >= a_max_depth, to prevent stack overflow from
-     *        malicious deeply nested packets.
-     *
-     * @return bool Return true when single DataElement parsed successfully.
-     *         Return false for any error (malformed header, out of bounds, length invalid, nesting depth exceeded etc.)
-     *
-     * @note This function parses ONLY ONE SDP DataElement, not multiple elements.
-     * @note When type is Sequence or Alternative, this function will recursively parse its child elements,
-     *       passing a_depth + 1 for nested parsing call.
-     * @note Upon return false, all output parameters (a_parsed_size, a_value) are invalid and shall not be used.
-     */
-    static bool parse_from
-        (
-        uint8_t const* a_buffer,
-        uint32_t a_size,
-        uint32_t& a_parsed_size,
-        sdp_data_element& a_value,
-        uint16_t a_depth = 0,
-        uint16_t a_max_depth = 10
-        );
-
-    /**
-     * @brief Parse a sequence of SDP DataElements from raw buffer
-     *
-     * @param a_buffer Pointer to input raw buffer containing continuous SDP DataElements
-     * @param a_size Total byte length available in a_buffer
-     * @param a_max_root_elements Maximum count of root DataElements allowed to parse.
-     *        Stop parsing once this number of root elements is reached.
-     * @param a_elements Output vector, parsed valid root SDP DataElements will be appended here.
-     *        The vector is NOT cleared inside this function; caller is responsible for clearing before invocation.
-     *
-     * @return bool Return true when all parsed elements are valid and parsing completes successfully.
-     *         Return false immediately upon any parsing error (malformed header, out-of-bounds, length mismatch etc.)
-     *
-     * @note Input buffer holds sequential independent root-level SDP DataElements.
-     * @note Nested elements inside Sequence / Alternative are counted as child elements, not root elements.
-     */
-    static bool parse_elements_from
-        (
-        uint8_t const* a_buffer,
-        uint32_t a_size,
-        uint16_t a_max_root_elements,
-        std::vector<sdp_data_element>& a_elements,
-        uint16_t a_depth = 0,
-        uint16_t a_max_depth = 10
-        );
-
-    /**
-     * recognite given buffer if it is data element raw buffer.
-     * return true if the buffer can be treated as data element raw buffer otherwise return false
-     * a_invalid_size indicates the data element buffer length.
-     */
-    static bool recognite_data_element( uint8_t* a_buffer, uint32_t a_size, uint32_t& a_invalid_size );
-
-    void set_null_value();
-
-    void set_uint32_value( uint32_t a_value );
-
-    uint32_t get_uint32_value()const;
-
-    bool can_as_uint32()const;
-
-    void set_uint8_value( uint8_t a_value );
-
-    uint8_t get_uint8_value()const;
-
-    bool can_as_uint8()const;
-
-    void set_string_value( std::u8string const& a_value );
-
-    std::u8string get_string_value()const;
-
-    bool can_as_string()const;
-
-    void set_url_value( std::u8string const& a_value );
-
-    std::u8string get_url_value()const;
-
-    bool can_as_url()const;
-
-    void set_uint16_value( uint16_t a_value );
-
-    uint16_t get_uint16_value()const;
-
-    bool can_as_uint16()const;
-
-    void set_uuid( uuid const& a_uuid );
-
-    uuid get_uuid()const;
-
-    bool can_as_uuid()const;
-
-    void set_elements( std::vector<sdp_data_element> a_elements );
-
-    void add_element( sdp_data_element a_element );
-
-    std::vector<sdp_data_element>const& get_elements()const;
-
-    bool can_as_elements()const;
-
-    void set_alternative_elements( std::vector<sdp_data_element> a_elements )
-    {
-        m_elemets = std::move( a_elements );
-        m_value_type = sdp_attribute_value_type::alternative_data_element;
-        prepare_raw_for_elements();
-    }
-
-    void add_alternative_element( sdp_data_element a_element )
-    {
-        m_value_type = sdp_attribute_value_type::alternative_data_element;
-        m_elemets.push_back( a_element );
-        prepare_raw_for_elements();
-    }
-
-    std::vector<sdp_data_element>const& get_alternative_elements()const
-    {
-        return m_elemets;
-    }
-
-    bool can_as_alternative_elements()const
-    {
-        return sdp_attribute_value_type::alternative_data_element == m_value_type;
-    }
-
-    /**
-     * If the detail type is elements, then use this function to extract all the
-     * uuids from these elements.
-     */
-    std::vector<uuid> get_uuid_from_elements();
-
-    void set_boolean( bool a_value = true );
-
-    bool get_boolean()const;
-
-    bool can_as_boolean()const;
-
-    std::tuple<sdp_attribute_value_type, uint8_t> get_value_type()
-    {
-        return { m_value_type, m_size_index };
-    }
-
-    std::vector<uint8_t> const& get_raw_buffer()const;
-
-    void clear()
-    {
-        m_elemets.clear();
-        m_value_type = sdp_attribute_value_type::null;
-    }
-
-    sdp_data_element() = default;
-
-    sdp_data_element( sdp_data_element&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-    }
-
-    sdp_data_element( sdp_data_element const& a_right )
-    {
-        copy_from( a_right );
-    }
-
-    sdp_data_element& operator=( sdp_data_element&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-        return *this;
-    }
-
-    sdp_data_element& operator=( sdp_data_element const& a_right )
-    {
-        copy_from( a_right );
-        return *this;
-    }
-
-private:
-
-    void stolen_from( sdp_data_element&& a_right )noexcept
-    {
-        m_size_index = a_right.m_size_index;
-        m_buffer.swap( a_right.m_buffer );
-        m_value_type = a_right.m_value_type;
-        m_elemets.swap( a_right.m_elemets );
-    }
-
-    void copy_from( sdp_data_element const& a_right )
-    {
-        m_size_index = a_right.m_size_index;
-        m_buffer = a_right.m_buffer;
-        m_value_type = a_right.m_value_type;
-        m_elemets = a_right.m_elemets;
-    }
-
-    void prepare_raw_for_elements();
-
-    uint8_t m_size_index = 0;
-    std::vector<uint8_t> m_buffer;
-    sdp_attribute_value_type m_value_type = sdp_attribute_value_type::null;
-    std::vector<sdp_data_element> m_elemets; // If the type is elements, then this member can be used.
-};
-
-struct protocol_descriptor
-{
-    void clear()
-    {
-        m_parameters.clear();
-    }
-
-    protocol_descriptor() = default;
-
-    protocol_descriptor( protocol_descriptor&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-    }
-
-    protocol_descriptor( protocol_descriptor const& a_right )
-    {
-        copy_from( a_right );
-    }
-
-    protocol_descriptor& operator=( protocol_descriptor&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-        return *this;
-    }
-
-    protocol_descriptor& operator=( protocol_descriptor const& a_right )
-    {
-        copy_from( a_right );
-        return *this;
-    }
-
-    void stolen_from( protocol_descriptor&& a_right )noexcept
-    {
-        m_uuid = a_right.m_uuid;
-        m_parameters = std::move( a_right.m_parameters );
-    }
-
-    void copy_from( protocol_descriptor const& a_right )
-    {
-        m_uuid = a_right.m_uuid;
-        m_parameters = a_right.m_parameters;
-    }
-
-    uuid m_uuid;
-    std::vector<sdp_data_element> m_parameters;
-};
-
-class sdp_attribute
-{
-
-public:
-
-    uint16_t get_attribute_id()const
-    {
-        return m_attribute_id;
-    }
-
-    void set_attribute_id( uint16_t a_id )
-    {
-        m_attribute_id = a_id;
-    }
-
-    sdp_data_element& get_value()
-    {
-        return m_value;
-    }
-
-    void clear()
-    {
-        m_value.clear();
-    }
-
-    sdp_attribute() = default;
-
-    sdp_attribute( sdp_attribute&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-    }
-
-    sdp_attribute( sdp_attribute const& a_right )
-    {
-        copy_from( a_right );
-    }
-
-    sdp_attribute& operator=( sdp_attribute&& a_right ) noexcept
-    {
-        stolen_from( std::move( a_right ) );
-        return *this;
-    }
-
-    sdp_attribute& operator=( sdp_attribute const& a_right )
-    {
-        copy_from( a_right );
-        return *this;
-    }
-
-private:
-
-    void stolen_from( sdp_attribute&& a_right )noexcept
-    {
-        m_attribute_id = a_right.m_attribute_id;
-        m_value = std::move( a_right.m_value );
-    }
-
-    void copy_from( sdp_attribute const& a_right )
-    {
-        m_attribute_id = a_right.m_attribute_id;
-        m_value = a_right.m_value;
-    }
-
-    uint16_t m_attribute_id = 0x00;
-    sdp_data_element m_value;
-};
-
-class sdp_service_record
-{
-
-public:
-
-    virtual ~sdp_service_record() {}
-
-    uint32_t get_service_handle();
-
-    void set_service_handle( uint32_t a_handle );
-
-    void set_service_class_id_list( std::vector<uuid> const& a_uuids );
-
-    void set_protocol_descriptor_list( std::vector<protocol_descriptor > a_list );
-
-    void set_service_record_state( uint32_t a_state );
-
-    void set_bluetooth_profile_descriptor_list( std::vector<sdp_data_element> a_descriptor_list );
-
-    bool is_matching_uuids( std::vector<uuid> const& a_uuids );
-
-    void set_default_language();
-
-    void set_attribute
-        (
-        uint16_t a_attribute_id,
-        sdp_data_element a_attribute_value
-        );
-
-    std::list<sdp_attribute>::iterator begin()
-    {
-        return m_attributes.begin();
-    }
-
-    std::list<sdp_attribute>::iterator end()
-    {
-        return m_attributes.end();
-    }
-
-    /**
-     * Within each attribute list, the attributes are listed in ascending order of attribute ID value.
-     */
-    void sort_attribute_by_id();
-
-protected:
-
-    sdp_attribute* find_attribute( uint16_t a_attribute_id );
-
-    std::list<sdp_attribute> m_attributes;
-};
-
-std::vector<sdp_data_element> make_language_attribute_list();
 
 }
 

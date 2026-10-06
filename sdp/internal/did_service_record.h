@@ -16,9 +16,20 @@
 
 #pragma once
 #include "../sdp_common.h"
+#include "sdp/sdp_service_record.h"
 
 namespace bluetooth
 {
+
+namespace did_attribute_id
+{
+    constexpr uint16_t specification_id = 0x0200;
+    constexpr uint16_t vendor_id = 0x0201;
+    constexpr uint16_t product_id = 0x0202;
+    constexpr uint16_t version = 0x0203;
+    constexpr uint16_t primary_record = 0x0204;
+    constexpr uint16_t vendor_id_source = 0x0205;
+}
 
 class did_service_record : public sdp_service_record
 {

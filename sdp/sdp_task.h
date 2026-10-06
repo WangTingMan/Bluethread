@@ -22,8 +22,9 @@
 
 #include "framework/abstract_task.h"
 #include "l2cap/l2cap_common.h"
-#include "uuid.h"
 #include "sdp_common.h"
+#include "sdp_service_record.h"
+#include "uuid.h"
 
 namespace bluetooth
 {

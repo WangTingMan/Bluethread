@@ -20,7 +20,12 @@
 namespace bluetooth
 {
 
+/**
+ * DID profile version 1.3
+ */
 constexpr uint16_t specification_id_value = 0x0103;
+
+
 constexpr uint16_t vendor_id_value = 0x00E0;
 constexpr uint16_t product_id_value = 0x1020;
 constexpr uint16_t version_value = 0x0436;
@@ -31,6 +36,11 @@ did_service_record::did_service_record()
     uuids.push_back( uuid::from_16bit( sdp_service_uuid::pnp_information ) );
     set_service_class_id_list( uuids );
 
+    /**
+     * To set the DID version number for this DID service record, the specification ID attribute (0x0200)
+     * is set to 0x0103, which indicates that this service record conforms to the Bluetooth Device ID
+     * Profile version 1.3.
+     */
     auto attribute = find_attribute( did_attribute_id::specification_id );
     if( !attribute )
     {
@@ -40,6 +50,10 @@ did_service_record::did_service_record()
     }
     attribute->get_value().set_uint16_value( specification_id_value );
 
+    /**
+     * To set the vendor ID, product ID, and version number for this DID service record,
+     * the following attributes are set:
+     */
     attribute = find_attribute( did_attribute_id::vendor_id );
     if( !attribute )
     {
@@ -67,6 +81,10 @@ did_service_record::did_service_record()
     }
     attribute->get_value().set_uint16_value( version_value );
 
+    /**
+     * To indicate that this DID service record is the primary record for the device,
+     * the primary record attribute (0x0204) is set to TRUE.
+     */
     attribute = find_attribute( did_attribute_id::primary_record );
     if( !attribute )
     {
@@ -76,6 +94,10 @@ did_service_record::did_service_record()
     }
     attribute->get_value().set_boolean();
 
+    /**
+     * To indicate that the vendor ID is assigned by the Bluetooth SIG,
+     * the vendor ID source attribute (0x0205) is set to 0x0001.
+     */
     attribute = find_attribute( did_attribute_id::vendor_id_source );
     if( !attribute )
     {
@@ -94,21 +116,21 @@ did_service_record::did_service_record()
     }
     attribute->get_value().set_elements( make_language_attribute_list() );
 
-    attribute = find_attribute( sdp_universal_attribute_id::provider_name_offset + language_base_id::english );
+    attribute = find_attribute( attribute_id_offset_for_string::provider_name_offset + language_base_id::english );
     if( !attribute )
     {
         m_attributes.push_back( sdp_attribute() );
         attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::provider_name_offset + language_base_id::english );
+        attribute->set_attribute_id( attribute_id_offset_for_string::provider_name_offset + language_base_id::english );
     }
     attribute->get_value().set_string_value( framework::convert( "Wang Fei" ) );
 
-    attribute = find_attribute( sdp_universal_attribute_id::provider_name_offset + language_base_id::chinese );
+    attribute = find_attribute( attribute_id_offset_for_string::provider_name_offset + language_base_id::chinese );
     if( !attribute )
     {
         m_attributes.push_back( sdp_attribute() );
         attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::provider_name_offset + language_base_id::chinese );
+        attribute->set_attribute_id( attribute_id_offset_for_string::provider_name_offset + language_base_id::chinese );
     }
     attribute->get_value().set_string_value( framework::convert( "Íõ·É" ) );
 }

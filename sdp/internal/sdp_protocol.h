@@ -18,6 +18,7 @@
 #include "../sdp_common.h"
 #include "bluetooth_address.h"
 #include "../common/protocol_headers.h"
+#include "sdp/sdp_data_element.h"
 
 #include <cstdint>
 #include <vector>

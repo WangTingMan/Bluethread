@@ -576,7 +576,7 @@ void spp_module::create_new_spp
     paras.set_string_value( a_name );
     spp_base_sdp_record->set_attribute
         (
-        sdp_universal_attribute_id::provider_name_offset + language_base_id::english,
+        attribute_id_offset_for_string::provider_name_offset + language_base_id::english,
         paras
         );
 

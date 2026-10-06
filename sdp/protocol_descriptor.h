@@ -23,6 +23,15 @@
 namespace bluetooth
 {
 
+/**
+* @brief Protocol descriptor entry for SDP ProtocolDescriptorList attribute.
+*
+* Refer to Bluetooth SDP specification section 5.1.5
+* 
+* Each protocol descriptor describes one layer in the protocol stack for a service.
+* Consists of a protocol UUID and optional additional protocol parameters.
+* Multiple entries form the ProtocolDescriptorList sequence (Attribute ID 0x0004).
+*/
 struct protocol_descriptor
 {
     void clear()
@@ -66,7 +75,15 @@ struct protocol_descriptor
         m_parameters = a_right.m_parameters;
     }
 
+    /**
+     * @brief UUID identifying the protocol, e.g. L2CAP, RFCOMM, HFP.
+     */
     uuid m_uuid;
+
+    /**
+     * @brief Optional protocol parameters following the protocol UUID.
+     * Represented as SDP data elements, may be empty if no extra parameters required.
+     */
     std::vector<sdp_data_element> m_parameters;
 };
 

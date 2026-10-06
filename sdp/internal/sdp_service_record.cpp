@@ -35,26 +35,13 @@ uint32_t sdp_service_record::get_service_handle()
 
 void sdp_service_record::set_service_handle( uint32_t a_handle )
 {
-    auto attribute = find_attribute( sdp_universal_attribute_id::service_record_handle );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::service_record_handle );
-    }
-
+    auto attribute = find_or_create_attribute( sdp_universal_attribute_id::service_record_handle );
     attribute->get_value().set_uint32_value( a_handle );
 }
 
 void sdp_service_record::set_service_class_id_list( std::vector<uuid> const& a_uuids )
 {
-    auto attribute = find_attribute( sdp_universal_attribute_id::service_class_id_list );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::service_class_id_list );
-    }
+    auto attribute = find_or_create_attribute( sdp_universal_attribute_id::service_class_id_list );
 
     auto& attribute_value = attribute->get_value();
     sdp_data_element uuid_attri;
@@ -67,8 +54,7 @@ void sdp_service_record::set_service_class_id_list( std::vector<uuid> const& a_u
 
 void sdp_service_record::set_protocol_descriptor_list( std::vector<protocol_descriptor> a_list )
 {
-    sdp_attribute attri;
-    attri.set_attribute_id( sdp_universal_attribute_id::protocol_descriptor_list );
+    sdp_attribute* attri = find_or_create_attribute( sdp_universal_attribute_id::protocol_descriptor_list );
 
     std::vector<sdp_data_element> protocol_list;
     for( auto& ele : a_list )
@@ -87,35 +73,19 @@ void sdp_service_record::set_protocol_descriptor_list( std::vector<protocol_desc
         protocol_list.push_back( protocol );
     }
 
-    attri.get_value().set_elements( protocol_list );
-
-    m_attributes.push_back( attri );
+    attri->get_value().set_elements( protocol_list );
 }
 
 void sdp_service_record::set_service_record_state( uint32_t a_state )
 {
-    auto attribute = find_attribute( sdp_universal_attribute_id::service_record_state );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::service_record_state );
-    }
-
+    auto attribute = find_or_create_attribute( sdp_universal_attribute_id::service_record_state );
     auto& attribute_value = attribute->get_value();
     attribute_value.set_uint32_value( a_state );
 }
 
 void sdp_service_record::set_bluetooth_profile_descriptor_list( std::vector<sdp_data_element> a_descriptor_list )
 {
-    auto attribute = find_attribute( sdp_universal_attribute_id::bluetooth_profile_descriptor_list );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::bluetooth_profile_descriptor_list );
-    }
-
+    auto attribute = find_or_create_attribute( sdp_universal_attribute_id::bluetooth_profile_descriptor_list );
     auto& attribute_value = attribute->get_value();
     attribute_value.set_elements( std::move( a_descriptor_list ) );
 }
@@ -167,13 +137,7 @@ bool sdp_service_record::is_matching_uuids( std::vector<uuid> const& a_uuids )
 
 void sdp_service_record::set_default_language()
 {
-    auto attribute = find_attribute( sdp_universal_attribute_id::language_base_attribute_id_list );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::language_base_attribute_id_list );
-    }
+    auto attribute = find_or_create_attribute( sdp_universal_attribute_id::language_base_attribute_id_list );
     attribute->get_value().set_elements( make_language_attribute_list() );
 }
 
@@ -183,13 +147,7 @@ void sdp_service_record::set_attribute
     sdp_data_element a_attribute_value
     )
 {
-    auto attribute = find_attribute( a_attribute_id );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( a_attribute_id );
-    }
+    auto attribute = find_or_create_attribute( a_attribute_id );
     attribute->get_value() = a_attribute_value;
 }
 

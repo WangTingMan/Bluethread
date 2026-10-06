@@ -50,6 +50,31 @@ namespace sdp_universal_attribute_id
 
 }
 
+namespace language_code
+{
+    constexpr uint16_t english = 0x656e; // en
+    constexpr uint16_t french = 0x6672;
+    constexpr uint16_t german = 0x6465;
+    constexpr uint16_t japanese = 0x6A61;
+    constexpr uint16_t chinese = 0x7A68; // zh
+};
+
+namespace language_base_id
+{
+    /**
+     * Base attribute ID for primary English language textual attributes.
+     * According to Bluetooth SDP specification, the first triplet in LanguageBaseAttributeIDList
+     * SHALL use 0x0100 as its base attribute ID.
+     */
+    constexpr uint16_t english = 0x0100;
+    /**
+     * Base attribute ID for Chinese language textual attributes.
+     * Derived offset value, ensuring base+0 / base+1 / base+2 fall within 0x0100~0x01FF range,
+     * and do not collide with other attribute IDs inside the same service record.
+     */
+    constexpr uint16_t chinese = english + 0x10;
+}
+
 /**
  * Refers to SDP profile's section 5.1.15 to section 5.1.17, which defines the attribute
  * IDs for service name, service description, and provider name.
@@ -61,6 +86,14 @@ namespace attribute_id_offset_for_string
     constexpr uint16_t service_description_offset = 0x0001;
     constexpr uint16_t provider_name_offset = 0x0002;
 }
+
+namespace code_page
+{
+    // see https://www.iana.org/assignments/character-sets/character-sets.xhtml
+    constexpr uint16_t utf_8 = 106;
+    constexpr uint16_t gbk = 113;
+    constexpr uint16_t gb18030 = 114;
+};
 
 namespace sdp_self_attribute_id
 {
@@ -105,29 +138,6 @@ enum class sdp_self_service_attribute_id : uint16_t
 {
     version_number_list = 0x0200,
     service_database_state = 0x0201
-};
-
-namespace language_code
-{
-    constexpr uint16_t english = 0x656e; // en
-    constexpr uint16_t french = 0x6672;
-    constexpr uint16_t german = 0x6465;
-    constexpr uint16_t japanese = 0x6A61;
-    constexpr uint16_t chinese = 0x7A68; // zh
-};
-
-namespace language_base_id
-{
-    constexpr uint16_t english = 0x0100;
-    constexpr uint16_t chinese = english + 0x10;
-}
-
-namespace code_page
-{
-    // see https://www.iana.org/assignments/character-sets/character-sets.xhtml
-    constexpr uint16_t utf_8 = 0x006a;
-    constexpr uint16_t gbk = 113;
-    constexpr uint16_t gb18030 = 114;
 };
 
 enum class sdp_attribute_value_type : uint8_t

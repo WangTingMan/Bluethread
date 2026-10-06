@@ -38,7 +38,37 @@ public:
 
     did_service_record();
 
+    void set_vendor_id( uint16_t a_vendor_id )
+    {
+        auto attribute = find_or_create_attribute( did_attribute_id::vendor_id );
+        attribute->get_value().set_uint16_value( a_vendor_id );
+    }
 
+    void set_product_id( uint16_t a_product_id )
+    {
+        auto attribute = find_or_create_attribute( did_attribute_id::product_id );
+        attribute->get_value().set_uint16_value( a_product_id );
+    }
+
+    void set_product_version( uint16_t a_product_version )
+    {
+        auto attribute = find_or_create_attribute( did_attribute_id::version );
+        attribute->get_value().set_uint16_value( a_product_version );
+    }
+
+private:
+
+    sdp_attribute* find_or_create_attribute( uint16_t a_attribute_id )
+    {
+        auto attribute = find_attribute( did_attribute_id::vendor_id );
+        if( !attribute )
+        {
+            m_attributes.push_back( sdp_attribute() );
+            attribute = &( m_attributes.back() );
+            attribute->set_attribute_id( a_attribute_id );
+        }
+        return attribute;
+    }
 };
 
 }

@@ -41,97 +41,50 @@ did_service_record::did_service_record()
      * is set to 0x0103, which indicates that this service record conforms to the Bluetooth Device ID
      * Profile version 1.3.
      */
-    auto attribute = find_attribute( did_attribute_id::specification_id );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::specification_id );
-    }
+    auto attribute = find_or_create_attribute( did_attribute_id::specification_id );
     attribute->get_value().set_uint16_value( specification_id_value );
 
     /**
      * To set the vendor ID, product ID, and version number for this DID service record,
      * the following attributes are set:
      */
-    attribute = find_attribute( did_attribute_id::vendor_id );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::vendor_id );
-    }
-    attribute->get_value().set_uint16_value( vendor_id_value );
-
-    attribute = find_attribute( did_attribute_id::product_id );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::product_id );
-    }
-    attribute->get_value().set_uint16_value( product_id_value );
-
-    attribute = find_attribute( did_attribute_id::version );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::version );
-    }
-    attribute->get_value().set_uint16_value( version_value );
+    set_vendor_id( vendor_id_value );
+    set_product_id( product_id_value );
+    set_product_version( version_value );
 
     /**
      * To indicate that this DID service record is the primary record for the device,
      * the primary record attribute (0x0204) is set to TRUE.
      */
-    attribute = find_attribute( did_attribute_id::primary_record );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::primary_record );
-    }
+    attribute = find_or_create_attribute( did_attribute_id::primary_record );
     attribute->get_value().set_boolean();
 
     /**
      * To indicate that the vendor ID is assigned by the Bluetooth SIG,
      * the vendor ID source attribute (0x0205) is set to 0x0001.
      */
-    attribute = find_attribute( did_attribute_id::vendor_id_source );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( did_attribute_id::vendor_id_source );
-    }
+    attribute = find_or_create_attribute( did_attribute_id::vendor_id_source );
     attribute->get_value().set_uint16_value( 0x0001 );
 
-    attribute = find_attribute( sdp_universal_attribute_id::language_base_attribute_id_list );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_universal_attribute_id::language_base_attribute_id_list );
-    }
+    attribute = find_or_create_attribute( sdp_universal_attribute_id::language_base_attribute_id_list );
     attribute->get_value().set_elements( make_language_attribute_list() );
 
-    attribute = find_attribute( attribute_id_offset_for_string::provider_name_offset + language_base_id::english );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( attribute_id_offset_for_string::provider_name_offset + language_base_id::english );
-    }
+    uint16_t english_provider_name_attribute_id = language_base_id::english +
+        attribute_id_offset_for_string::provider_name_offset;
+    attribute = find_or_create_attribute( english_provider_name_attribute_id );
     attribute->get_value().set_string_value( framework::convert( "Wang Fei" ) );
 
-    attribute = find_attribute( attribute_id_offset_for_string::provider_name_offset + language_base_id::chinese );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( attribute_id_offset_for_string::provider_name_offset + language_base_id::chinese );
-    }
+    uint16_t descriptor_provider_name_attribute_id = language_base_id::english +
+        attribute_id_offset_for_string::service_description_offset;
+    attribute = find_or_create_attribute( descriptor_provider_name_attribute_id );
+    std::string descriptor = "This is an example describing the DID service, demonstrating how"
+        " to add service descriptions within a service. Clients may read the value of"
+        " this attribute to obtain the description of the service.";
+    attribute->get_value().set_string_value( framework::convert( descriptor ) );
+
+    uint16_t chinese_provider_name_attribute_id = language_base_id::chinese +
+        attribute_id_offset_for_string::provider_name_offset;
+    attribute = find_or_create_attribute( chinese_provider_name_attribute_id );
     attribute->get_value().set_string_value( framework::convert( "Íõ·É" ) );
 }
 

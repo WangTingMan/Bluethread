@@ -13,12 +13,37 @@
  *
  * Commercial closed-source licenses are available upon request.
  */
-
+#include "endian_convert.h"
 #include "sdp_connection.h"
 #include "sdp_manager.h"
 
 namespace bluetooth
 {
+
+std::vector<uint8_t> make_continuation( void* a_continue_pointer )
+{
+    uintptr_t ptr_val = reinterpret_cast<uintptr_t>( a_continue_pointer );
+    std::vector<uint8_t> buffer( sizeof( uintptr_t ) );
+    std::memcpy( buffer.data(), &ptr_val, sizeof( uintptr_t ) );
+    return buffer;
+}
+
+bool exact_pointer_from_continuation( std::vector<uint8_t>const& a_continue_buffer, uintptr_t& a_pointer )
+{
+    a_pointer = 0;
+    if( a_continue_buffer.empty() )
+    {
+        return true;
+    }
+
+    if( a_continue_buffer.size() != sizeof( uintptr_t ) )
+    {
+        return false;
+    }
+
+    std::memcpy( &a_pointer, a_continue_buffer.data(), sizeof( uintptr_t ) );
+    return true;
+}
 
 void sdp_connection::handle_error_rsp
     (
@@ -32,10 +57,10 @@ void sdp_connection::handle_error_rsp
 void sdp_connection::handle_service_search_request
     (
     sdp_header& _sdp_header,
-    std::shared_ptr<sdp_service_search_request> const& a_error_rsp
+    std::shared_ptr<sdp_service_search_request> const& a_ser_searching
     )
 {
-    if( !a_error_rsp )
+    if( !a_ser_searching )
     {
         return;
     }
@@ -46,9 +71,170 @@ void sdp_connection::handle_service_search_request
         return;
     }
 
+    if( a_ser_searching->m_matching_uuids.empty() )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_syntax );
+        return;
+    }
+
     m_incoming_pending_req = sdp_pdu_id::sdp_service_search_req;
+    std::list<std::shared_ptr<sdp_service_record>> record_matched;
+    std::vector<uint32_t> service_handles;
+    record_matched = m_sdp_manager->m_local_service.find_matched_uuids_record( a_ser_searching->m_matching_uuids );
+    for( auto& ele : record_matched )
+    {
+        service_handles.push_back( ele->get_service_handle() );
+    }
+}
 
+void sdp_connection::handle_service_search_attribute_request
+    (
+    sdp_header& a_sdp_header,
+    std::shared_ptr<sdp_service_search_attribute_req> const& a_request
+    )
+{
+    if( !a_request )
+    {
+        return;
+    }
 
+    if( m_incoming_pending_req != sdp_pdu_id::sdp_invalid_pdu )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::reject_with_resource_limited );
+        return;
+    }
+
+    uint32_t max_pdu_content = m_remote_mtu - a_sdp_header.header_size() - 2 - 1 - sizeof( void* );
+    uint32_t max_bytes_to_send = std::min<uint32_t>( max_pdu_content, a_request->m_max_return_count );
+    if( a_request->m_continue_info.size() > 0 )
+    {
+        uintptr_t pointer = 0;
+        bool status = false;
+        status = exact_pointer_from_continuation( a_request->m_continue_info, pointer );
+        if( status )
+        {
+            auto c_buf = exract_continue_buffer( pointer );
+            if( c_buf )
+            {
+                std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
+                rsp = std::make_shared<sdp_service_search_attribute_rsp>();
+                rsp->m_local_cid = a_request->m_local_cid;
+                rsp->m_transaction_id = a_request->m_transaction_id;
+                rsp->m_remote_device = a_request->m_remote_device;
+
+                if( c_buf->buffer.size() > max_bytes_to_send )
+                {
+                    std::shared_ptr<continuation_control_block> ccb;
+                    ccb = std::make_shared<continuation_control_block>();
+                    auto it = c_buf->buffer.begin();
+                    std::advance( it, max_bytes_to_send );
+                    ccb->buffer.assign( it, c_buf->buffer.end() );
+                    c_buf->buffer.erase( it, c_buf->buffer.end() );
+                    uint8_t* p_continue = ccb->buffer.data();
+                    m_conitues_buffers.push_back( ccb );
+                    rsp->m_continue_info = make_continuation( p_continue );
+                }
+                rsp->m_attribute_list = std::move( c_buf->buffer );
+                m_sdp_manager->send_packet( rsp, m_address );
+                m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+            }
+            else
+            {
+                m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+            }
+        }
+        else
+        {
+            m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+        }
+        m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+        return;
+    }
+
+    if( a_request->m_matching_uuids.empty() )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_syntax );
+        m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+        return;
+    }
+
+    m_incoming_pending_req = sdp_pdu_id::sdp_service_search_attr_req;
+    std::list<std::shared_ptr<sdp_service_record>> record_matched;
+    std::vector<sdp_data_element> attribute_list_result;
+    record_matched = m_sdp_manager->m_local_service.find_matched_uuids_record( a_request->m_matching_uuids );
+    for( auto& ele : record_matched )
+    {
+        sdp_data_element matched_values;
+        std::vector<sdp_data_element> matched_details;
+        sdp_service_record& record = *ele;
+        for( auto& attribute_ele : record )
+        {
+            uint16_t id = attribute_ele.get_attribute_id();
+            bool found = false;
+            for( auto& match_id : a_request->m_requested_id_ranges )
+            {
+                if( id <= match_id.second && id >= match_id.first )
+                {
+                    sdp_data_element data_element;
+                    data_element.set_uint16_value( id );
+                    matched_details.push_back( data_element );
+                    matched_details.push_back( attribute_ele.get_value() );
+                    found = true;
+                    break;
+                }
+            }
+
+            if( found )
+            {
+                continue;
+            }
+
+            for( auto& match_id : a_request->m_matching_ids )
+            {
+                if( id == match_id )
+                {
+                    sdp_data_element data_element;
+                    data_element.set_uint16_value( id );
+                    matched_details.push_back( data_element );
+                    matched_details.push_back( attribute_ele.get_value() );
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if( !matched_details.empty() )
+        {
+            matched_values.set_elements( std::move( matched_details ) );
+            attribute_list_result.push_back( std::move( matched_values ) );
+        }
+    }
+
+    sdp_data_element element;
+    element.set_elements( attribute_list_result );
+    auto raw = element.get_raw_buffer();
+    std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
+    rsp = std::make_shared<sdp_service_search_attribute_rsp>();
+    rsp->m_local_cid = a_request->m_local_cid;
+    rsp->m_transaction_id = a_request->m_transaction_id;
+    rsp->m_remote_device = a_request->m_remote_device;
+
+    if( raw.size() > max_bytes_to_send )
+    {
+        std::shared_ptr<continuation_control_block> ccb;
+        ccb = std::make_shared<continuation_control_block>();
+        auto it = raw.begin();
+        std::advance( it, max_bytes_to_send );
+        ccb->buffer.assign( it, raw.end() );
+        raw.erase( it, raw.end() );
+        uint8_t* p_continue = ccb->buffer.data();
+        m_conitues_buffers.push_back( ccb );
+        rsp->m_continue_info = make_continuation(p_continue);
+    }
+    rsp->m_attribute_list = std::move( raw );
+
+    m_sdp_manager->send_packet( rsp, m_address );
+    m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
 }
 
 }

@@ -36,8 +36,6 @@ using namespace framework;
 
 void sdp_manager::init()
 {
-    m_local_service.set_send_packet_fun( std::bind( &sdp_manager::send_packet, this,
-        std::placeholders::_1, std::placeholders::_2 ) );
 }
 
 void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request> const& a_request )
@@ -354,7 +352,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_req:
         {
             auto request = parse_service_search_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
-            m_local_service.handle_service_search_attribute_request( request );
+            sdp_con->handle_service_search_attribute_request( _sdp_header, request );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_rsp:

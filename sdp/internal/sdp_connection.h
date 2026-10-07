@@ -25,6 +25,11 @@ namespace bluetooth
 
 class sdp_manager;
 
+struct continuation_control_block
+{
+    std::vector<uint8_t> buffer;
+};
+
 /**
  * SDP l2cap connection control block.
  * Only one SDP connection for specified remote device
@@ -149,7 +154,13 @@ public:
     void handle_service_search_request
         (
         sdp_header& _sdp_header,
-        std::shared_ptr<sdp_service_search_request> const& a_error_rsp
+        std::shared_ptr<sdp_service_search_request> const& a_ser_searching
+        );
+
+    void handle_service_search_attribute_request
+        (
+        sdp_header& _sdp_header,
+        std::shared_ptr<sdp_service_search_attribute_req> const& a_request
         );
 
 public:
@@ -161,12 +172,35 @@ public:
 
 private:
 
+    std::shared_ptr<continuation_control_block> exract_continue_buffer( uintptr_t a_pointer )
+    {
+        std::shared_ptr<continuation_control_block> ccb;
+        for( auto it = m_conitues_buffers.begin(); it != m_conitues_buffers.end(); )
+        {
+            ccb = *it;
+            uintptr_t ptr_val = reinterpret_cast<uintptr_t>( ccb->buffer.data() );
+            if( a_pointer == ptr_val )
+            {
+                it = m_conitues_buffers.erase( it );
+                break;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        return ccb;
+    }
+
     connection_status m_connection_status = connection_status::disconnected;
     bool m_config_local_req_sent = false; // whether sent local config request to remote device
     bool m_config_local_rsp_received = false; // whether received local config response from remote device
     bool m_config_remote_req_received = false; // whether received remote config request from remote device
     bool m_config_remote_rsp_sent = false; // whether send remote config response to remote device
     sdp_pdu_id m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+    /* remote side's this l2cap channel's MTU*/
+    uint32_t m_remote_mtu = 4800;
+    std::vector<std::shared_ptr<continuation_control_block>> m_conitues_buffers;
     sdp_manager* m_sdp_manager = nullptr;
 };
 

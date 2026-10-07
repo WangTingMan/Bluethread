@@ -15,8 +15,8 @@
  */
 
 #pragma once
-#include "sdp_service_record_db.h"
 #include "sdp_protocol.h"
+#include "sdp/sdp_service_record.h"
 
 #include <functional>
 
@@ -32,29 +32,25 @@ public:
 
     void init_db();
 
-    void handle_service_search_attribute_request
-        (
-        std::shared_ptr<sdp_service_search_attribute_req> const& a_request
-        );
-
-    void set_send_packet_fun( sdp_packet_send_type a_fun )
-    {
-        m_packet_send = a_fun;
-    }
-
     uint32_t register_record( std::shared_ptr<sdp_service_record> a_record );
 
     void clear()
     {
-        m_service_record_db.clear();
+        m_local_services.clear();
         m_next_record_id = 0x00;
     }
+
+    std::list<std::shared_ptr<sdp_service_record>> find_matched_uuids_record
+        (
+        std::vector<uuid> const& a_uuids
+        );
+
+    std::shared_ptr<sdp_service_record> find_service( uint32_t a_service_record_handle );
 
 private:
 
     uint32_t m_next_record_id = 0x00;
-    sdp_service_record_db m_service_record_db;
-    sdp_packet_send_type m_packet_send;
+    std::list<std::shared_ptr<sdp_service_record>> m_local_services;
 };
 
 }

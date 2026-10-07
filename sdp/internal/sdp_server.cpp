@@ -41,91 +41,55 @@ void sdp_server::init_db()
 
 }
 
-void sdp_server::handle_service_search_attribute_request
-    (
-    std::shared_ptr<sdp_service_search_attribute_req> const& a_request
-    )
-{
-    std::list<std::shared_ptr<sdp_service_record>> record_matched;
-    std::vector<sdp_data_element> attribute_list_result;
-
-    record_matched = m_service_record_db.find_matched_uuids_record( a_request->m_matching_uuids );
-    for( auto& ele : record_matched )
-    {
-        sdp_data_element matched_values;
-        std::vector<sdp_data_element> matched_details;
-        sdp_service_record& record = *ele;
-        for( auto& attribute_ele : record )
-        {
-            uint16_t id = attribute_ele.get_attribute_id();
-            bool found = false;
-            for( auto& match_id : a_request->m_requested_id_ranges )
-            {
-                if( id <= match_id.second && id >= match_id.first )
-                {
-                    sdp_data_element data_element;
-                    data_element.set_uint16_value( id );
-                    matched_details.push_back( data_element );
-                    matched_details.push_back( attribute_ele.get_value() );
-                    found = true;
-                    break;
-                }
-            }
-
-            if( found )
-            {
-                continue;
-            }
-
-            for( auto& match_id : a_request->m_matching_ids )
-            {
-                if( id == match_id )
-                {
-                    sdp_data_element data_element;
-                    data_element.set_uint16_value( id );
-                    matched_details.push_back( data_element );
-                    matched_details.push_back( attribute_ele.get_value() );
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if( !matched_details.empty() )
-        {
-            matched_values.set_elements( std::move( matched_details ) );
-            attribute_list_result.push_back( std::move( matched_values ) );
-        }
-    }
-
-    std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
-    rsp = std::make_shared<sdp_service_search_attribute_rsp>();
-    rsp->m_local_cid = a_request->m_local_cid;
-    rsp->m_transaction_id = a_request->m_transaction_id;
-    sdp_data_element element;
-    element.set_elements( attribute_list_result );
-    auto raw = element.get_raw_buffer();
-    if( raw.size() > a_request->m_max_return_count )
-    {
-        LogUtilError() << "Need to split the buffer";
-        // TODO Need to split the buffer
-        return;
-    }
-    rsp->m_attribute_list = std::move( raw );
-    rsp->m_remote_device = a_request->m_remote_device;
-
-    m_packet_send( rsp, rsp->m_remote_device);
-}
-
 uint32_t sdp_server::register_record( std::shared_ptr<sdp_service_record> a_record )
 {
     uint32_t handle = m_next_record_id++;
 
     a_record->set_service_handle( handle );
     a_record->sort_attribute_by_id();
-    m_service_record_db.add_service_record( a_record );
+    for( auto& ele : m_local_services )
+    {
+        if( a_record->get_service_handle() == ele->get_service_handle() )
+        {
+            LogUtilError() << "Add service handle: " << ele->get_service_handle() << " again.";
+            ele = a_record;
+            return handle;
+        }
+    }
+
+    m_local_services.push_back( a_record );
 
     return handle;
+}
+
+std::list<std::shared_ptr<sdp_service_record>> sdp_server::find_matched_uuids_record
+    (
+    std::vector<uuid> const& a_uuids
+    )
+{
+    std::list<std::shared_ptr<sdp_service_record>> ret;
+    for( auto& ele : m_local_services )
+    {
+        if( ele->is_matching_uuids( a_uuids ) )
+        {
+            ret.push_back( ele );
+        }
+    }
+    return ret;
+}
+
+std::shared_ptr<sdp_service_record> sdp_server::find_service( uint32_t a_service_record_handle )
+{
+    std::shared_ptr<sdp_service_record> record;
+    for( auto& ele : m_local_services )
+    {
+        if( a_service_record_handle == ele->get_service_handle() )
+        {
+            record = ele;
+            break;
+        }
+    }
+    return record;
 }
 
 }

@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "sdp_service_record_db.h"
 #include "sdp_protocol.h"
 #include "sdp_server.h"
 #include "sdp_connection.h"
@@ -29,6 +28,8 @@ namespace bluetooth
 
 class sdp_manager
 {
+
+    friend class sdp_connection;
 
 public:
 

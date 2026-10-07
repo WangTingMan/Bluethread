@@ -28,6 +28,8 @@ class sdp_manager;
 struct continuation_control_block
 {
     std::vector<uint8_t> buffer;
+    uint16_t total_record_handle_count;
+    std::vector<uint32_t> service_record_handles;
 };
 
 /**
@@ -179,6 +181,26 @@ private:
         {
             ccb = *it;
             uintptr_t ptr_val = reinterpret_cast<uintptr_t>( ccb->buffer.data() );
+            if( a_pointer == ptr_val )
+            {
+                it = m_conitues_buffers.erase( it );
+                break;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+        return ccb;
+    }
+
+    std::shared_ptr<continuation_control_block> exract_continue_handles( uintptr_t a_pointer )
+    {
+        std::shared_ptr<continuation_control_block> ccb;
+        for( auto it = m_conitues_buffers.begin(); it != m_conitues_buffers.end(); )
+        {
+            ccb = *it;
+            uintptr_t ptr_val = reinterpret_cast<uintptr_t>( ccb->service_record_handles.data() );
             if( a_pointer == ptr_val )
             {
                 it = m_conitues_buffers.erase( it );

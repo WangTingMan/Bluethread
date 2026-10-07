@@ -56,7 +56,7 @@ void sdp_connection::handle_error_rsp
 
 void sdp_connection::handle_service_search_request
     (
-    sdp_header& _sdp_header,
+    sdp_header& a_sdp_header,
     std::shared_ptr<sdp_service_search_request> const& a_ser_searching
     )
 {
@@ -68,6 +68,56 @@ void sdp_connection::handle_service_search_request
     if( m_incoming_pending_req != sdp_pdu_id::sdp_invalid_pdu )
     {
         m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::reject_with_resource_limited );
+        return;
+    }
+
+    uint32_t max_pdu_content = m_remote_mtu - a_sdp_header.header_size() - sizeof( uint16_t ) * 2 - sizeof( void* ) * 2;
+    uint32_t max_count_send = std::min<uint32_t>( max_pdu_content / sizeof( uint32_t ), a_ser_searching->m_max_return_count );
+
+    if( a_ser_searching->m_continue_info.size() > 0 )
+    {
+        uintptr_t pointer = 0;
+        bool status = false;
+        status = exact_pointer_from_continuation( a_ser_searching->m_continue_info, pointer );
+        if( status )
+        {
+            auto c_buf = exract_continue_handles( pointer );
+            if( c_buf )
+            {
+                std::shared_ptr<sdp_service_search_response> rsp;
+                rsp = std::make_shared<sdp_service_search_response>();
+                rsp->m_local_cid = a_ser_searching->m_local_cid;
+                rsp->m_transaction_id = a_ser_searching->m_transaction_id;
+                rsp->m_remote_device = a_ser_searching->m_remote_device;
+
+                if( c_buf->service_record_handles.size() > max_count_send )
+                {
+                    std::shared_ptr<continuation_control_block> ccb;
+                    ccb = std::make_shared<continuation_control_block>();
+                    auto it = c_buf->service_record_handles.begin();
+                    std::advance( it, max_count_send );
+                    ccb->service_record_handles.assign( it, c_buf->service_record_handles.end() );
+                    c_buf->service_record_handles.erase( it, c_buf->service_record_handles.end() );
+                    uint32_t* p_continue = ccb->service_record_handles.data();
+                    ccb->total_record_handle_count = c_buf->total_record_handle_count;
+                    m_conitues_buffers.push_back( ccb );
+                    rsp->m_continue_info = make_continuation( p_continue );
+                }
+                rsp->m_matched_record_handles = std::move( c_buf->service_record_handles );
+                rsp->m_total_record_count = c_buf->total_record_handle_count;
+                m_sdp_manager->send_packet( rsp, m_address );
+                m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+            }
+            else
+            {
+                m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+            }
+        }
+        else
+        {
+            m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+        }
+        m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
         return;
     }
 
@@ -85,6 +135,30 @@ void sdp_connection::handle_service_search_request
     {
         service_handles.push_back( ele->get_service_handle() );
     }
+
+    std::shared_ptr<sdp_service_search_response> rsp;
+    rsp = std::make_shared<sdp_service_search_response>();
+    rsp->m_local_cid = a_ser_searching->m_local_cid;
+    rsp->m_transaction_id = a_ser_searching->m_transaction_id;
+    rsp->m_remote_device = a_ser_searching->m_remote_device;
+    rsp->m_total_record_count = service_handles.size();
+    if( service_handles.size() > max_count_send )
+    {
+        std::shared_ptr<continuation_control_block> ccb;
+        ccb = std::make_shared<continuation_control_block>();
+        auto it = service_handles.begin();
+        std::advance( it, max_count_send );
+        ccb->service_record_handles.assign( it, service_handles.end() );
+        ccb->total_record_handle_count = service_handles.size();
+        service_handles.erase( it, service_handles.end() );
+        uint32_t* p_continue = ccb->service_record_handles.data();
+        m_conitues_buffers.push_back( ccb );
+        rsp->m_continue_info = make_continuation( p_continue );
+    }
+
+    rsp->m_matched_record_handles = std::move( service_handles );
+    m_sdp_manager->send_packet( rsp, m_address );
+    m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
 }
 
 void sdp_connection::handle_service_search_attribute_request

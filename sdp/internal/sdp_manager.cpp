@@ -474,7 +474,41 @@ void sdp_manager::send_packet
 
         _sdp_header.set_transcation_id( rsp->m_transaction_id );
     }
-    break;
+        break;
+    case sdp_pdu_id::sdp_service_search_rsp:
+    {
+        std::shared_ptr<sdp_service_search_response> rsp;
+        rsp = std::static_pointer_cast<sdp_service_search_response>( a_packet );
+        local_cid = rsp->m_local_cid;
+        hci_packet = std::make_shared<hci_data>();
+
+        sdp_sdu_size = 2/*TotalServiceRecordCount*/ + 2/*CurrentServiceRecordCount*/
+            + rsp->m_matched_record_handles.size() * 4 + sizeof( uint8_t ) + rsp->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        /* write TotalServiceRecordCount*/
+        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_total_record_count ) );
+        offset += sizeof( uint16_t );
+        /* write CurrentServiceRecordCount */
+        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_matched_record_handles.size() ) );
+        offset += sizeof( uint16_t );
+        /* write ServiceRecordHandleList */
+        for( auto& handle : rsp->m_matched_record_handles )
+        {
+            write_be32( p_sdp_sdu, handle );
+            offset += sizeof( uint32_t );
+        }
+        /* write ContinuationState */
+        p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( rsp->m_transaction_id );
+    }
+        break;
     case sdp_pdu_id::sdp_service_search_attr_req:
     {
         std::shared_ptr<sdp_service_search_attribute_req> req;
@@ -1134,6 +1168,7 @@ std::shared_ptr<sdp_service_search_attribute_req> sdp_manager::parse_service_sea
     request->m_continue_info = continue_state;
     request->m_local_cid = a_sdp_header.get_channel_id();
     request->m_remote_device = remote_device;
+    request->m_transaction_id = a_sdp_header.get_transaction_id();
     return request;
 }
 

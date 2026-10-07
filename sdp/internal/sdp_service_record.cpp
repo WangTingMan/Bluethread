@@ -15,6 +15,8 @@
  */
 #include "sdp/sdp_service_record.h"
 
+#include <framework/log_util.h>
+
 namespace bluetooth
 {
 
@@ -93,45 +95,32 @@ void sdp_service_record::set_bluetooth_profile_descriptor_list( std::vector<sdp_
 bool sdp_service_record::is_matching_uuids( std::vector<uuid> const& a_uuids )
 {
     bool ret = false;
-    std::vector<uuid> contain_uuids;
-    for( auto& ele : m_attributes )
+    std::vector<uuid> target_uuids;
+    if( a_uuids.empty() )
     {
-        sdp_data_element& value = ele.get_value();
-        if( value.can_as_uuid() )
-        {
-            contain_uuids.push_back( value.get_uuid() );
-            continue;
-        }
+        LogUtilError( "empty uuid list" );
+        return true;
+    }
 
-        if( value.can_as_elements() )
+    target_uuids.reserve( a_uuids.size() );
+    for( auto& ele : a_uuids )
+    {
+        if( std::find( target_uuids.begin(), target_uuids.end(), ele ) == target_uuids.end() )
         {
-            std::vector<uuid> uuids;
-            uuids = value.get_uuid_from_elements();
-            contain_uuids.insert( contain_uuids.end(), uuids.begin(), uuids.end() );
-            continue;
+            target_uuids.push_back( ele );
         }
     }
 
-    for( auto& goal_uuid : a_uuids )
+    for( auto& ele : m_attributes )
     {
-        bool has = false;
-        for( auto& local_uuid : contain_uuids )
+        sdp_data_element& value = ele.get_value();
+        ret = value.matching_uuids( target_uuids );
+        if( ret )
         {
-            if( goal_uuid == local_uuid )
-            {
-                has = true;
-                break;
-            }
-        }
-
-        if( !has )
-        {
-            ret = false;
             return ret;
         }
     }
 
-    ret = true;
     return ret;
 }
 

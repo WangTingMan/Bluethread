@@ -29,6 +29,7 @@ namespace bluetooth
 
 enum class sdp_pdu_id : uint8_t
 {
+    sdp_invalid_pdu = 0x00,
     sdp_error_rsp = 0x01,
     sdp_service_search_req = 0x02,
     sdp_service_search_rsp = 0x03,
@@ -112,12 +113,12 @@ public:
     bluetooth_address m_remote_device;
 };
 
-class sdp_error_rsp : public sdp_protocol_base
+class sdp_error_response : public sdp_protocol_base
 {
 
 public:
 
-    sdp_error_rsp()
+    sdp_error_response()
     {
         m_pdu_id = sdp_pdu_id::sdp_error_rsp;
         m_parameter_length = 2;

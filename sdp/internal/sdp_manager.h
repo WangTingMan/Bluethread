@@ -99,7 +99,7 @@ private:
         std::shared_ptr<hci_data> const& a_packet
         );
 
-    std::shared_ptr<sdp_error_rsp> parse_error_rsp
+    std::shared_ptr<sdp_error_response> parse_error_rsp
         (
         sdp_header& a_sdp_header,
         uint8_t* a_parameter_buffer,

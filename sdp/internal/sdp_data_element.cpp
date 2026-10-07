@@ -1016,6 +1016,62 @@ std::vector<uuid> sdp_data_element::get_uuid_from_elements()
     return uuids;
 }
 
+bool sdp_data_element::matching_uuids( std::vector<uuid>& a_target_uuid ) const
+{
+    bool status = false;
+    uuid this_uuid;
+    if( a_target_uuid.empty() )
+    {
+        return true;
+    }
+
+    if( can_as_uuid() )
+    {
+        this_uuid = get_uuid();
+        for( auto it = a_target_uuid.begin(); it != a_target_uuid.end(); )
+        {
+            if( *it == this_uuid )
+            {
+                it = a_target_uuid.erase( it );
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    if( a_target_uuid.empty() )
+    {
+        return true;
+    }
+
+    if( can_as_elements() )
+    {
+        auto& element_values = get_elements();
+        for( auto& ele : element_values )
+        {
+            if( a_target_uuid.empty() )
+            {
+                return true;
+            }
+
+            status = ele.matching_uuids( a_target_uuid );
+            if( status )
+            {
+                return true;
+            }
+        }
+    }
+
+    if( a_target_uuid.empty() )
+    {
+        return true;
+    }
+
+    return false;
+}
+
 void sdp_data_element::set_boolean( bool a_value )
 {
     m_value_type = sdp_attribute_value_type::boolean_type;

@@ -168,6 +168,33 @@ public:
         */
     std::vector<uuid> get_uuid_from_elements();
 
+    /**
+     * @brief Recursively match UUIDs contained in current SDP data element, remove matched UUIDs from target list.
+     *
+     * Implements UUID subset matching rule for SDP_SERVICE_SEARCH_REQ service search pattern.
+     * Traverses current data element and its child elements. If a UUID element is found,
+     * the matched UUID will be erased from the input target UUID list in-place.
+     *
+     * @param[inout] a_target_uuid Target UUID list to match against.
+     *               Matched UUID entries are removed from this list during traversal.
+     * @return bool
+     *         - true: All UUIDs in search pattern are found (a_target_uuid empty after scan).
+     *         - false: Some UUIDs from search pattern are not found (remaining entries in list).
+     *
+     * @details Execution rules:
+     * 1. If input a_target_uuid is empty, return true directly.
+     * 2. If current data element is a UUID type: extract UUID, remove it from a_target_uuid if present.
+     * 3. If current data element is an array: recursively invoke matching_uuids for each child sdp_data_element.
+     * 4. After full traversal, return true if a_target_uuid is empty; otherwise return false.
+     *
+     * @note Preconditions enforced by caller / packet parser:
+     * 1. Caller shall ensure a_target_uuid is NOT empty and contains no duplicate UUIDs before calling.
+     * 2. The number of UUIDs in search pattern is limited to maximum 12 per SDP specification.
+     * 3. SDP data element nesting depth is restricted at packet parsing stage, preventing deep recursion.
+     * @note Used to implement subset matching for SDP_SERVICE_SEARCH_REQ PDU.
+     */
+    bool matching_uuids( std::vector<uuid>& a_target_uuid ) const;
+
     void set_boolean( bool a_value = true );
 
     bool get_boolean()const;

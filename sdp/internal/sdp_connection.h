@@ -23,6 +23,8 @@
 namespace bluetooth
 {
 
+class sdp_manager;
+
 /**
  * SDP l2cap connection control block.
  * Only one SDP connection for specified remote device
@@ -31,6 +33,17 @@ class sdp_connection
 {
 
 public:
+
+    sdp_connection( sdp_manager* a_sdp_manager )
+        : m_sdp_manager( a_sdp_manager )
+    {
+
+    }
+
+    void set_sdp_manager( sdp_manager* a_sdp_manager )
+    {
+        m_sdp_manager = a_sdp_manager;
+    }
 
     /**
      * Set the connection status.
@@ -130,7 +143,13 @@ public:
     void handle_error_rsp
         (
         sdp_header& _sdp_header,
-        std::shared_ptr<sdp_error_rsp> const& a_error_rsp
+        std::shared_ptr<sdp_error_response> const& a_error_rsp
+        );
+
+    void handle_service_search_request
+        (
+        sdp_header& _sdp_header,
+        std::shared_ptr<sdp_service_search_request> const& a_error_rsp
         );
 
 public:
@@ -147,6 +166,8 @@ private:
     bool m_config_local_rsp_received = false; // whether received local config response from remote device
     bool m_config_remote_req_received = false; // whether received remote config request from remote device
     bool m_config_remote_rsp_sent = false; // whether send remote config response to remote device
+    sdp_pdu_id m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+    sdp_manager* m_sdp_manager = nullptr;
 };
 
 }

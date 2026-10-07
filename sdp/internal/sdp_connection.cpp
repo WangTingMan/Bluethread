@@ -15,6 +15,7 @@
  */
 
 #include "sdp_connection.h"
+#include "sdp_manager.h"
 
 namespace bluetooth
 {
@@ -22,9 +23,31 @@ namespace bluetooth
 void sdp_connection::handle_error_rsp
     (
     sdp_header& _sdp_header,
-    std::shared_ptr<sdp_error_rsp> const& a_error_rsp
+    std::shared_ptr<sdp_error_response> const& a_error_rsp
     )
 {
+
+}
+
+void sdp_connection::handle_service_search_request
+    (
+    sdp_header& _sdp_header,
+    std::shared_ptr<sdp_service_search_request> const& a_error_rsp
+    )
+{
+    if( !a_error_rsp )
+    {
+        return;
+    }
+
+    if( m_incoming_pending_req != sdp_pdu_id::sdp_invalid_pdu )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::reject_with_resource_limited );
+        return;
+    }
+
+    m_incoming_pending_req = sdp_pdu_id::sdp_service_search_req;
+
 
 }
 

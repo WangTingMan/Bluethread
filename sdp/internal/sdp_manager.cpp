@@ -75,7 +75,7 @@ void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request
         {
             LogUtilDebug() << "Make one due to no sdp connection control block for device: " << address.to_string();
 
-            std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
+            std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>( this );
             sdp_conn->m_address = address;
             sdp_conn->set_connection_status( connection_status::connecting );
             sdp_conn->set_acl_handle( a_request->m_acl_handle );
@@ -132,7 +132,7 @@ void sdp_manager::handle_config_request( std::shared_ptr<l2cap_config_request> c
     {
         LogUtilError() << "Make one due to no sdp connection control block for device: " << address.to_string();
 
-        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
+        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>( this );
         sdp_conn->m_address = address;
         sdp_conn->set_connection_status( connection_status::connecting );
         sdp_conn->set_acl_handle( a_request->m_acl_handle );
@@ -203,7 +203,7 @@ void sdp_manager::handle_connection_state_changed
             auto [acl_handle, has] = acl_db->get_handle( a_address );
             if( has )
             {
-                sdp_connection_ = std::make_shared<sdp_connection>();
+                sdp_connection_ = std::make_shared<sdp_connection>( this );
                 sdp_connection_->m_address = a_address;
                 sdp_connection_->set_acl_handle( acl_handle );
                 sdp_connection_->set_local_cid( a_local_cid );
@@ -332,6 +332,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_search_req:
         {
             auto req = parse_service_search_request( _sdp_header, _parameter_buffer, _parameter_size );
+            sdp_con->handle_service_search_request( _sdp_header, req );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_rsp:
@@ -422,7 +423,7 @@ void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task
 
         framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 
-        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>();
+        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>( this );
         sdp_conn->m_address = detail_tsk->m_remote_device;
         sdp_conn->set_connection_status( connection_status::connecting );
         m_connections.push_back( sdp_conn );
@@ -591,14 +592,14 @@ bool sdp_manager::verify_received_packet
     return true;
 }
 
-std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
+std::shared_ptr<sdp_error_response> sdp_manager::parse_error_rsp
     (
     sdp_header& a_sdp_header,
     uint8_t* a_parameter_buffer,
     uint16_t a_parameter_size
     )
 {
-    std::shared_ptr<sdp_error_rsp> error_rsp;
+    std::shared_ptr<sdp_error_response> error_rsp;
     uint8_t* p_buffer = a_parameter_buffer;
     int32_t size_left = a_parameter_size;
 
@@ -610,7 +611,7 @@ std::shared_ptr<sdp_error_rsp> sdp_manager::parse_error_rsp
     }
     error_code = be_to_host16( p_buffer );
 
-    error_rsp = std::make_shared<sdp_error_rsp>();
+    error_rsp = std::make_shared<sdp_error_response>();
     error_rsp->m_error_code = static_cast<sdp_error_code>( error_code );
     error_rsp->m_transaction_id = a_sdp_header.get_transaction_id();
     error_rsp->m_local_cid = a_sdp_header.get_channel_id();

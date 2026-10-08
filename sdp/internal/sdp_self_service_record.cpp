@@ -40,14 +40,7 @@ sdp_self_service_record::sdp_self_service_record()
 
 void sdp_self_service_record::set_version_number_list( std::vector<uint16_t> const& a_versions )
 {
-    auto attribute = find_attribute( sdp_self_attribute_id::version_number_list );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_self_attribute_id::version_number_list );
-    }
-
+    auto attribute = find_or_create_attribute( sdp_self_attribute_id::version_number_list );
     attribute->clear();
     auto& attribute_value = attribute->get_value();
     sdp_data_element version_attri;
@@ -60,14 +53,7 @@ void sdp_self_service_record::set_version_number_list( std::vector<uint16_t> con
 
 void sdp_self_service_record::set_service_database_state( uint32_t a_state )
 {
-    auto attribute = find_attribute( sdp_self_attribute_id::service_database_state );
-    if( !attribute )
-    {
-        m_attributes.push_back( sdp_attribute() );
-        attribute = &( m_attributes.back() );
-        attribute->set_attribute_id( sdp_self_attribute_id::service_database_state );
-    }
-
+    auto attribute = find_or_create_attribute( sdp_self_attribute_id::version_number_list );
     attribute->get_value().set_uint32_value( a_state );
 }
 

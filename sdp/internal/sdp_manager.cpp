@@ -341,7 +341,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_attr_req:
         {
             auto request = parse_service_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
-
+            sdp_con->parse_service_attribute_request( _sdp_header, request );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
@@ -501,6 +501,34 @@ void sdp_manager::send_packet
             write_be32( p_sdp_sdu, handle );
             offset += sizeof( uint32_t );
         }
+        /* write ContinuationState */
+        p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( rsp->m_transaction_id );
+    }
+        break;
+    case sdp_pdu_id::sdp_service_attr_rsp:
+    {
+        std::shared_ptr<sdp_service_attribute_response> rsp;
+        rsp = std::static_pointer_cast<sdp_service_attribute_response>( a_packet );
+        local_cid = rsp->m_local_cid;
+        hci_packet = std::make_shared<hci_data>();
+
+        sdp_sdu_size = 2/*AttributeListByteCount*/ + rsp->m_attribute_list_raw_buffer.size()/*AttributeList*/
+            + sizeof( uint8_t ) + rsp->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        /* write AttributeListByteCount */
+        write_le16( p_sdp_sdu, rsp->m_attribute_list_raw_buffer.size() );
+        offset += sizeof( uint16_t );
+        /* write AttributeList*/
+        memcpy( p_sdp_sdu, rsp->m_attribute_list_raw_buffer.data(), rsp->m_attribute_list_raw_buffer.size() );
+        offset += rsp->m_attribute_list_raw_buffer.size();
         /* write ContinuationState */
         p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
         offset += 1;

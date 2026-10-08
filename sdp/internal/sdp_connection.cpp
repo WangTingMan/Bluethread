@@ -311,5 +311,141 @@ void sdp_connection::handle_service_search_attribute_request
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
 }
 
+void sdp_connection::parse_service_attribute_request
+    (
+    sdp_header& a_sdp_header,
+    std::shared_ptr<sdp_service_attribute_request> const& a_request
+    )
+{
+    if( !a_request )
+    {
+        return;
+    }
+
+    if( m_incoming_pending_req != sdp_pdu_id::sdp_invalid_pdu )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::reject_with_resource_limited );
+        return;
+    }
+
+    uint32_t max_pdu_content = m_remote_mtu - a_sdp_header.header_size() - 2 /*AttributeListByteCount*/
+        - 1 - sizeof( void* ) /*ContinuationState*/;
+    uint32_t max_bytes_to_send = std::min<uint32_t>( max_pdu_content, a_request->m_max_attribute_count );
+
+    if( a_request->m_continue_info.size() > 0 )
+    {
+        uintptr_t pointer = 0;
+        bool status = false;
+        status = exact_pointer_from_continuation( a_request->m_continue_info, pointer );
+        if( status )
+        {
+            auto c_buf = exract_continue_buffer( pointer );
+            if( c_buf )
+            {
+                std::shared_ptr<sdp_service_attribute_response> rsp;
+                rsp = std::make_shared<sdp_service_attribute_response>();
+                rsp->m_local_cid = a_request->m_local_cid;
+                rsp->m_transaction_id = a_request->m_transaction_id;
+                rsp->m_remote_device = a_request->m_remote_device;
+
+                if( c_buf->buffer.size() > max_bytes_to_send )
+                {
+                    std::shared_ptr<continuation_control_block> ccb;
+                    ccb = std::make_shared<continuation_control_block>();
+                    auto it = c_buf->buffer.begin();
+                    std::advance( it, max_bytes_to_send );
+                    ccb->buffer.assign( it, c_buf->buffer.end() );
+                    c_buf->buffer.erase( it, c_buf->buffer.end() );
+                    uint8_t* p_continue = ccb->buffer.data();
+                    m_conitues_buffers.push_back( ccb );
+                    rsp->m_continue_info = make_continuation( p_continue );
+                }
+                rsp->m_attribute_list_raw_buffer = std::move( c_buf->buffer );
+                m_sdp_manager->send_packet( rsp, m_address );
+            }
+            else
+            {
+                m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+            }
+        }
+        else
+        {
+            m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_continue_status );
+        }
+        m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+        return;
+    }
+
+    auto service_record = m_sdp_manager->m_local_service.find_service( a_request->m_service_record_handle );
+    if( !service_record )
+    {
+        m_sdp_manager->send_error_rsp( m_acl_handle, sdp_error_code::invalid_service_record_handle );
+        return;
+    }
+
+    sdp_data_element matched_values;
+    std::vector<sdp_data_element> matched_details;
+    for( auto& attribute_ele : *service_record )
+    {
+        uint16_t id = attribute_ele.get_attribute_id();
+        bool found = false;
+        for( auto& match_id : a_request->m_requested_id_ranges )
+        {
+            if( id <= match_id.second && id >= match_id.first )
+            {
+                sdp_data_element data_element;
+                data_element.set_uint16_value( id );
+                matched_details.push_back( data_element );
+                matched_details.push_back( attribute_ele.get_value() );
+                found = true;
+                break;
+            }
+        }
+
+        if( found )
+        {
+            continue;
+        }
+
+        for( auto& match_id : a_request->m_matching_ids )
+        {
+            if( id == match_id )
+            {
+                sdp_data_element data_element;
+                data_element.set_uint16_value( id );
+                matched_details.push_back( data_element );
+                matched_details.push_back( attribute_ele.get_value() );
+                found = true;
+                break;
+            }
+        }
+    }
+
+    matched_values.set_elements( std::move( matched_details ) );
+    auto raw = matched_values.get_raw_buffer();
+    std::shared_ptr<sdp_service_attribute_response> rsp;
+    rsp = std::make_shared<sdp_service_attribute_response>();
+    rsp->m_local_cid = a_request->m_local_cid;
+    rsp->m_transaction_id = a_request->m_transaction_id;
+    rsp->m_remote_device = a_request->m_remote_device;
+
+    if( raw.size() > max_bytes_to_send )
+    {
+        std::shared_ptr<continuation_control_block> ccb;
+        ccb = std::make_shared<continuation_control_block>();
+        auto it = raw.begin();
+        std::advance( it, max_bytes_to_send );
+        ccb->buffer.assign( it, raw.end() );
+        raw.erase( it, raw.end() );
+        uint8_t* p_continue = ccb->buffer.data();
+        m_conitues_buffers.push_back( ccb );
+        rsp->m_continue_info = make_continuation( p_continue );
+    }
+    rsp->m_attribute_list_raw_buffer = std::move( raw );
+
+    m_sdp_manager->send_packet( rsp, m_address );
+    m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+}
+
 }
 

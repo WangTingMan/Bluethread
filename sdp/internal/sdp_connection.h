@@ -165,6 +165,12 @@ public:
         std::shared_ptr<sdp_service_search_attribute_req> const& a_request
         );
 
+    void parse_service_attribute_request
+        (
+        sdp_header& _sdp_header,
+        std::shared_ptr<sdp_service_attribute_request> const& a_request
+        );
+
 public:
 
     bluetooth_address m_address;

@@ -187,6 +187,7 @@ public:
 
     uint16_t m_attribute_list_byte_count = 0;
     std::vector<sdp_data_element> m_attribute_list;
+    std::vector<uint8_t> m_attribute_list_raw_buffer;
     std::vector<uint8_t> m_continue_info;
 };
 

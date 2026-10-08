@@ -66,9 +66,9 @@ public:
 
     void handle_sdu( std::shared_ptr<hci_data> );
 
-    void handle_register_record( std::shared_ptr<sdp_task> const& a_task );
+    void register_record( std::shared_ptr<sdp_task> const& a_task );
 
-    void handle_service_search( std::shared_ptr<sdp_task> const& a_task );
+    void service_search( std::shared_ptr<sdp_task> const& a_task );
 
     /**
      * Handle the service search attribute request from upper layer

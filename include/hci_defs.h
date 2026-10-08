@@ -426,17 +426,17 @@ enum class le_states_combinations : uint8_t
 
 enum class defined_l2cap_psm : uint16_t
 {
-    invalid = 0x00,
-    sdp = 0x01,
-    rfcomm = 0x03,
-    hid_control = 0x011,
-    hid_interrupt = 0x013,
-    avctp = 0x017,
-    avdtp = 0x19,
-    avctp_browsing = 0x01B,
-    att = 0x1F,
-    ots = 0x25,
-    eatt = 0x27
+    invalid =       0x00,
+    sdp =           0x0001,
+    rfcomm =        0x0003,
+    hid_control =   0x0011,
+    hid_interrupt = 0x0013,
+    avctp =         0x0017,
+    avdtp =         0x0019,
+    avctp_browsing = 0x001B,
+    att =           0x001F,
+    ots =           0x0025,
+    eatt =          0x0027
 };
 
 }

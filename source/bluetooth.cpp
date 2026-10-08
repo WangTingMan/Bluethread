@@ -20,6 +20,8 @@
 #include "gap/gap_module.h"
 #include "rfcomm/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
+#include "sdp/sdp_module.h"
+#include "sdp/sdp_task.h"
 
 #include "framework/framework_manager.h"
 #include "framework/framework_event.h"
@@ -31,6 +33,7 @@
 
 bluetooth_interface s_interface;
 serial_port_interface s_serial_port_interface;
+sdp_profile_interface s_sdp_interface;
 
 namespace
 {
@@ -85,6 +88,11 @@ void send( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local, ui
 
 }
 
+namespace sdp
+{
+    void search_service( bluetooth_address a_address, std::vector<bluetooth::uuid> a_uuids );
+}
+
 bluetooth_interface* get_bt_interface()
 {
     static bluetooth_interface* s_inter = nullptr;
@@ -129,6 +137,8 @@ void init_bt_interface()
     s_serial_port_interface.disconnect_port = &serial_port::disconnect_port;
     s_serial_port_interface.connect = &serial_port::connect;
     s_serial_port_interface.send = &serial_port::send;
+
+    s_sdp_interface.search_service = &sdp::search_service;
 }
 
 void enable_bt()
@@ -348,6 +358,11 @@ void disconnect( bluetooth_address a_address )
 
 void connect( bluetooth_address a_address )
 {
+    std::vector<bluetooth::uuid> uuids;
+    uuids.push_back( bluetooth::uuid::from_16bit( 0x0100 ) );
+    sdp::search_service( a_address, uuids );
+    return;
+
     std::shared_ptr<bluetooth::spp_module::spp_task> task;
     task = std::make_shared<bluetooth::spp_module::spp_task>();
     task->m_type = bluetooth::spp_task_type::connect_default_spp;
@@ -373,4 +388,17 @@ void send( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local, ui
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
+}
+
+namespace sdp
+{
+    void search_service( bluetooth_address a_address, std::vector<bluetooth::uuid> a_uuids )
+    {
+        std::shared_ptr<bluetooth::sdp_task_service_search_request> task;
+        task = std::make_shared<bluetooth::sdp_task_service_search_request>();
+        task->m_remote_device = a_address;
+        task->m_service_uuid = a_uuids;
+
+        framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+    }
 }

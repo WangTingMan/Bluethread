@@ -19,6 +19,7 @@
 #include "common.h"
 
 #include "sdp_protocol.h"
+#include "sdp/sdp_task.h"
 
 namespace bluetooth
 {
@@ -30,6 +31,12 @@ struct continuation_control_block
     std::vector<uint8_t> buffer;
     uint16_t total_record_handle_count;
     std::vector<uint32_t> service_record_handles;
+};
+
+struct pending_request
+{
+    std::shared_ptr<sdp_task> m_pending_request;
+    std::shared_ptr<sdp_protocol_base> m_protocol_msg;
 };
 
 /**
@@ -56,12 +63,7 @@ public:
      * Set the connection status.
      * return true if the status has been changed
      */
-    bool set_connection_status( connection_status a_connection_status )
-    {
-        bool ret = ( m_connection_status != a_connection_status );
-        m_connection_status = a_connection_status;
-        return ret;
-    }
+    bool set_connection_status( connection_status a_connection_status );
 
     connection_status const& get_connection_status()const
     {
@@ -145,6 +147,8 @@ public:
         return ( m_acl_handle == a_acl_handle );
     }
 
+    void search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search );
+
 public:
 
     void handle_error_rsp
@@ -165,7 +169,7 @@ public:
         std::shared_ptr<sdp_service_search_attribute_req> const& a_request
         );
 
-    void parse_service_attribute_request
+    void handle_service_attribute_request
         (
         sdp_header& _sdp_header,
         std::shared_ptr<sdp_service_attribute_request> const& a_request
@@ -220,7 +224,10 @@ private:
         return ccb;
     }
 
+    void process_next_pending_request();
+
     connection_status m_connection_status = connection_status::disconnected;
+    uint16_t m_next_transaction_id = 0;
     bool m_config_local_req_sent = false; // whether sent local config request to remote device
     bool m_config_local_rsp_received = false; // whether received local config response from remote device
     bool m_config_remote_req_received = false; // whether received remote config request from remote device
@@ -229,6 +236,8 @@ private:
     /* remote side's this l2cap channel's MTU*/
     uint32_t m_remote_mtu = 4800;
     std::vector<std::shared_ptr<continuation_control_block>> m_conitues_buffers;
+    std::vector<pending_request> m_pending_requests;
+    pending_request m_current_pending_request;/*we already sent request pdu to remote side and waiting for response*/
     sdp_manager* m_sdp_manager = nullptr;
 };
 

@@ -341,7 +341,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_attr_req:
         {
             auto request = parse_service_attribute_request( _sdp_header, _parameter_buffer, _parameter_size );
-            sdp_con->parse_service_attribute_request( _sdp_header, request );
+            sdp_con->handle_service_attribute_request( _sdp_header, request );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
@@ -366,7 +366,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     }
 }
 
-void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_task )
+void sdp_manager::register_record( std::shared_ptr<sdp_task> const& a_task )
 {
     auto detail_tsk = std::static_pointer_cast<sdp_task_register_service_record>( a_task );
 
@@ -382,9 +382,26 @@ void sdp_manager::handle_register_record( std::shared_ptr<sdp_task> const& a_tas
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 
-void sdp_manager::handle_service_search( std::shared_ptr<sdp_task> const& a_task )
+void sdp_manager::service_search( std::shared_ptr<sdp_task> const& a_task )
 {
+    auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_request>( a_task );
+    auto con = find_connection( detail_tsk->m_remote_device );
+    if( !con )
+    {
+        auto l2cap_con_req = std::make_shared<l2cap_task_connection_request>();
+        l2cap_con_req->set_source_module( sdp_module::s_sdp_module_name );
+        l2cap_con_req->m_remote_device = detail_tsk->m_remote_device;
+        l2cap_con_req->m_psm = defined_l2cap_psm::sdp;
+        framework_manager::get_instance().get_thread_manager().post_task( l2cap_con_req, framework::source_here );
 
+        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>( this );
+        sdp_conn->m_address = detail_tsk->m_remote_device;
+        sdp_conn->set_connection_status( connection_status::connecting );
+        m_connections.push_back( sdp_conn );
+        con = sdp_conn;
+    }
+
+    con->search_service( detail_tsk );
 }
 
 void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task )
@@ -493,12 +510,12 @@ void sdp_manager::send_packet
         write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_total_record_count ) );
         offset += sizeof( uint16_t );
         /* write CurrentServiceRecordCount */
-        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_matched_record_handles.size() ) );
+        write_be16( p_sdp_sdu + offset, static_cast<uint16_t>( rsp->m_matched_record_handles.size() ) );
         offset += sizeof( uint16_t );
         /* write ServiceRecordHandleList */
         for( auto& handle : rsp->m_matched_record_handles )
         {
-            write_be32( p_sdp_sdu, handle );
+            write_be32( p_sdp_sdu + offset, handle );
             offset += sizeof( uint32_t );
         }
         /* write ContinuationState */
@@ -527,7 +544,7 @@ void sdp_manager::send_packet
         write_le16( p_sdp_sdu, rsp->m_attribute_list_raw_buffer.size() );
         offset += sizeof( uint16_t );
         /* write AttributeList*/
-        memcpy( p_sdp_sdu, rsp->m_attribute_list_raw_buffer.data(), rsp->m_attribute_list_raw_buffer.size() );
+        memcpy( p_sdp_sdu + offset, rsp->m_attribute_list_raw_buffer.data(), rsp->m_attribute_list_raw_buffer.size() );
         offset += rsp->m_attribute_list_raw_buffer.size();
         /* write ContinuationState */
         p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
@@ -535,6 +552,47 @@ void sdp_manager::send_packet
         memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
 
         _sdp_header.set_transcation_id( rsp->m_transaction_id );
+    }
+        break;
+    case sdp_pdu_id::sdp_service_search_req:
+    {
+        std::shared_ptr<sdp_service_search_request> req;
+        req = std::static_pointer_cast<sdp_service_search_request>( a_packet );
+        local_cid = req->m_local_cid;
+        hci_packet = std::make_shared<hci_data>();
+
+        sdp_data_element data_element;
+        std::vector<sdp_data_element> uuid_elements;
+        for( auto& uuid : req->m_matching_uuids )
+        {
+            sdp_data_element uuid_ele;
+            uuid_ele.set_uuid( uuid );
+            uuid_elements.push_back( std::move( uuid_ele ) );
+        }
+        data_element.set_elements( std::move( uuid_elements ) );
+        auto data_element_raw = data_element.get_raw_buffer();
+
+        sdp_sdu_size = data_element_raw.size() /*ServiceSearchPattern*/ + 2 /*MaximumServiceRecordCount*/
+            + sizeof( uint8_t ) + req->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        /* write ServiceSearchPattern */
+        memcpy( p_sdp_sdu, data_element_raw.data(), data_element_raw.size() );
+        offset += data_element_raw.size();
+
+        /* write MaximumServiceRecordCount */
+        write_be16( p_sdp_sdu + offset, req->m_max_return_count );
+        offset += 2;
+
+        /* write ContinuationState */
+        p_sdp_sdu[offset] = static_cast<uint8_t>( req->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, req->m_continue_info.data(), req->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( req->m_transaction_id );
     }
         break;
     case sdp_pdu_id::sdp_service_search_attr_req:

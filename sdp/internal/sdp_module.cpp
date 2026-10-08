@@ -95,10 +95,10 @@ void sdp_module::handle_task( std::shared_ptr<abstract_task> a_task )
     switch( detail_task->m_type )
     {
     case sdp_task_type::register_service_record:
-        m_sdp_manager->handle_register_record( detail_task );
+        m_sdp_manager->register_record( detail_task );
         break;
     case sdp_task_type::service_search_request:
-        m_sdp_manager->handle_service_search( detail_task );
+        m_sdp_manager->service_search( detail_task );
         break;
     case sdp_task_type::service_search_attribute:
         m_sdp_manager->handle_service_search_attribute_host( detail_task );

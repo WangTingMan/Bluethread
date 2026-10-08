@@ -17,6 +17,8 @@
 #include "sdp_connection.h"
 #include "sdp_manager.h"
 
+#include <framework/log_util.h>
+
 namespace bluetooth
 {
 
@@ -43,6 +45,40 @@ bool exact_pointer_from_continuation( std::vector<uint8_t>const& a_continue_buff
 
     std::memcpy( &a_pointer, a_continue_buffer.data(), sizeof( uintptr_t ) );
     return true;
+}
+
+bool sdp_connection::set_connection_status( connection_status a_connection_status )
+{
+    bool ret = ( m_connection_status != a_connection_status );
+    m_connection_status = a_connection_status;
+    if( m_connection_status == connection_status::connected )
+    {
+        process_next_pending_request();
+    }
+    return ret;
+}
+
+void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search )
+{
+    if( m_connection_status != connection_status::connected ||
+        m_current_pending_request.m_pending_request )
+    {
+        pending_request request;
+        request.m_pending_request = a_service_search;
+        m_pending_requests.push_back( request );
+        return;
+    }
+
+    std::shared_ptr<sdp_service_search_request> request;
+    request = std::make_shared<sdp_service_search_request>();
+    request->m_transaction_id = m_next_transaction_id++;
+    request->m_remote_device = a_service_search->m_remote_device;
+    request->m_matching_uuids = a_service_search->m_service_uuid;
+    request->m_local_cid = m_local_cid;
+    request->m_max_return_count = 0xFF;
+    m_current_pending_request.m_pending_request = a_service_search;
+    m_current_pending_request.m_protocol_msg = request;
+    m_sdp_manager->send_packet( request, m_address );
 }
 
 void sdp_connection::handle_error_rsp
@@ -311,7 +347,7 @@ void sdp_connection::handle_service_search_attribute_request
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
 }
 
-void sdp_connection::parse_service_attribute_request
+void sdp_connection::handle_service_attribute_request
     (
     sdp_header& a_sdp_header,
     std::shared_ptr<sdp_service_attribute_request> const& a_request
@@ -445,6 +481,25 @@ void sdp_connection::parse_service_attribute_request
 
     m_sdp_manager->send_packet( rsp, m_address );
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+}
+
+void sdp_connection::process_next_pending_request()
+{
+    auto first_pending = m_pending_requests.front();
+    m_pending_requests.erase( m_pending_requests.begin() );
+
+    switch( first_pending.m_pending_request->m_type )
+    {
+    case sdp_task_type::service_search_request:
+        search_service( std::static_pointer_cast<sdp_task_service_search_request>
+            ( first_pending.m_pending_request ) );
+        break;
+    default:
+        LogUtilError() << "pending task not ignored with type: "
+            << static_cast<uint32_t>( first_pending.m_pending_request->m_type );
+        break;
+    }
+
 }
 
 }

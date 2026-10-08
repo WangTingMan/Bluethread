@@ -18,9 +18,11 @@
 #include "global_config.h"
 #include "bluetooth_address.h"
 #include "common.h"
+#include "uuid.h"
 
 #include <string>
 #include <functional>
+#include <vector>
 
 typedef void ( *stack_callback )( bluetooth::service_type a_type, bluetooth::function_type a_function, void* a_paras );
 
@@ -115,6 +117,11 @@ struct BLUETOOTH_EXPORT serial_port_interface
      * Disconnect all connected port with specified remote device
      */
     void ( *disconnect )( bluetooth_address a_address );
+};
+
+struct sdp_profile_interface
+{
+    void (*search_service)( bluetooth_address a_address, std::vector<bluetooth::uuid> a_uuids );
 };
 
 BLUETOOTH_EXPORT bluetooth_interface* get_bt_interface();

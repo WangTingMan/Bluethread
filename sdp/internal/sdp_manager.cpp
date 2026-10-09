@@ -336,6 +336,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_search_rsp:
         {
             auto rsp = parse_service_search_response( _sdp_header, _parameter_buffer, _parameter_size );
+            sdp_con->handle_service_search_response( _sdp_header, rsp );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_attr_req:
@@ -347,6 +348,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_attr_rsp:
         {
             auto response = parse_service_attribute_response( _sdp_header, _parameter_buffer, _parameter_size );
+            sdp_con->handle_sdp_service_attribute_response( _sdp_header, response );
         }
         break;
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_req:
@@ -586,6 +588,59 @@ void sdp_manager::send_packet
         /* write MaximumServiceRecordCount */
         write_be16( p_sdp_sdu + offset, req->m_max_return_count );
         offset += 2;
+
+        /* write ContinuationState */
+        p_sdp_sdu[offset] = static_cast<uint8_t>( req->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, req->m_continue_info.data(), req->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( req->m_transaction_id );
+    }
+        break;
+    case sdp_pdu_id::sdp_service_attr_req:
+    {
+        std::shared_ptr<sdp_service_attribute_request> req;
+        req = std::static_pointer_cast<sdp_service_attribute_request>( a_packet );
+        local_cid = req->m_local_cid;
+        hci_packet = std::make_shared<hci_data>();
+
+        sdp_data_element data_element;
+        std::vector<sdp_data_element> ids_elements;
+        for( auto& id : req->m_matching_ids )
+        {
+            sdp_data_element id_element;
+            id_element.set_uint16_value( id );
+            ids_elements.push_back( std::move( id_element ) );
+        }
+        for( auto& id_pair : req->m_requested_id_ranges )
+        {
+            sdp_data_element id_element;
+            uint16_t start = std::min( id_pair.first, id_pair.second );
+            uint16_t end = std::max( id_pair.first, id_pair.second );
+            uint32_t range = ( static_cast<uint32_t>( start ) << 16 ) | end;
+            id_element.set_uint32_value( range );
+            ids_elements.push_back( std::move( id_element ) );
+        }
+        data_element.set_elements( std::move( ids_elements ) );
+        auto data_element_raw = data_element.get_raw_buffer();
+
+        sdp_sdu_size = data_element_raw.size() /*AttributeIDList*/ + 4 /*ServiceRecordHandle*/
+            + 2 /*MaximumAttributeByteCount*/
+            + sizeof( uint8_t ) + req->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        /* write ServiceRecordHandle */
+        write_be32( p_sdp_sdu + offset, req->m_service_record_handle );
+        offset += 4;
+        /* write MaximumAttributeByteCount */
+        write_be16( p_sdp_sdu + offset, req->m_max_attribute_count );
+        offset += 2;
+        /* write AttributeIDList */
+        memcpy( p_sdp_sdu + offset, data_element_raw.data(), data_element_raw.size() );
+        offset += data_element_raw.size();
 
         /* write ContinuationState */
         p_sdp_sdu[offset] = static_cast<uint8_t>( req->m_continue_info.size() );

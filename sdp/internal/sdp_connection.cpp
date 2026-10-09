@@ -61,11 +61,11 @@ bool sdp_connection::set_connection_status( connection_status a_connection_statu
 void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search )
 {
     if( m_connection_status != connection_status::connected ||
-        m_current_pending_request.m_pending_request )
+        m_current_pending_request )
     {
-        pending_request request;
-        request.m_pending_request = a_service_search;
-        m_pending_requests.push_back( request );
+        auto sdp_tsk = std::make_shared<sdp_task_pending>();
+        sdp_tsk->m_pending_request = a_service_search;
+        m_pending_tasks.push_back( sdp_tsk );
         return;
     }
 
@@ -76,8 +76,30 @@ void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_req
     request->m_matching_uuids = a_service_search->m_service_uuid;
     request->m_local_cid = m_local_cid;
     request->m_max_return_count = 0xFF;
-    m_current_pending_request.m_pending_request = a_service_search;
-    m_current_pending_request.m_protocol_msg = request;
+    m_current_pending_request = request;
+    m_sdp_manager->send_packet( request, m_address );
+}
+
+void sdp_connection::search_service_by_handle( uint32_t a_handle )
+{
+    if( m_connection_status != connection_status::connected ||
+        m_current_pending_request )
+    {
+        auto sdp_tsk = std::make_shared<wrapped_sdp_task_pending>();
+        sdp_tsk->m_task = std::bind( &sdp_connection::search_service_by_handle, this, a_handle );
+        m_pending_tasks.push_back( sdp_tsk );
+        return;
+    }
+
+    std::shared_ptr<sdp_service_attribute_request> request;
+    request = std::make_shared<sdp_service_attribute_request>();
+    request->m_transaction_id = m_next_transaction_id++;
+    request->m_remote_device = m_address;
+    request->m_local_cid = m_local_cid;
+    request->m_service_record_handle = a_handle;
+    request->m_max_attribute_count = 0xFFFF;
+    request->m_requested_id_ranges.push_back( { 0x0000,0xFFFF } );
+    m_current_pending_request = request;
     m_sdp_manager->send_packet( request, m_address );
 }
 
@@ -87,7 +109,8 @@ void sdp_connection::handle_error_rsp
     std::shared_ptr<sdp_error_response> const& a_error_rsp
     )
 {
-
+    m_current_pending_request.reset();
+    process_next_pending_request();
 }
 
 void sdp_connection::handle_service_search_request
@@ -195,6 +218,23 @@ void sdp_connection::handle_service_search_request
     rsp->m_matched_record_handles = std::move( service_handles );
     m_sdp_manager->send_packet( rsp, m_address );
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+}
+
+void sdp_connection::handle_service_search_response
+    (
+    sdp_header& _sdp_header,
+    std::shared_ptr<sdp_service_search_response> const& a_ser_response
+    )
+{
+    m_current_pending_request.reset();
+    a_ser_response->m_return_record_count;
+    a_ser_response->m_matched_record_handles;
+    search_service_by_handle( 0x00 );
+    for( auto& handle : a_ser_response->m_matched_record_handles )
+    {
+        search_service_by_handle( handle );
+    }
+    process_next_pending_request();
 }
 
 void sdp_connection::handle_service_search_attribute_request
@@ -483,23 +523,59 @@ void sdp_connection::handle_service_attribute_request
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
 }
 
+void sdp_connection::handle_sdp_service_attribute_response
+    (
+    sdp_header& _sdp_header,
+    std::shared_ptr<sdp_service_attribute_response> const& a_response
+    )
+{
+    m_current_pending_request.reset();
+    process_next_pending_request();
+}
+
 void sdp_connection::process_next_pending_request()
 {
-    auto first_pending = m_pending_requests.front();
-    m_pending_requests.erase( m_pending_requests.begin() );
-
-    switch( first_pending.m_pending_request->m_type )
+    if( m_pending_tasks.empty() )
     {
-    case sdp_task_type::service_search_request:
-        search_service( std::static_pointer_cast<sdp_task_service_search_request>
-            ( first_pending.m_pending_request ) );
+        return;
+    }
+
+    auto first_pending = m_pending_tasks.front();
+    m_pending_tasks.erase( m_pending_tasks.begin() );
+
+    switch( first_pending->m_pending_type )
+    {
+    case pending_type::sdp_task_pending_type:
+        process_pending_sdp_task( std::static_pointer_cast<sdp_task_pending>
+            ( first_pending ) );
+        break;
+    case pending_type::sdp_wrapped_task:
+    {
+        auto pending_task = std::static_pointer_cast<wrapped_sdp_task_pending>( first_pending );
+        pending_task->m_task();
+    }
         break;
     default:
-        LogUtilError() << "pending task not ignored with type: "
-            << static_cast<uint32_t>( first_pending.m_pending_request->m_type );
+        LogUtilError() << "pending task ignored with type: "
+            << static_cast<uint32_t>( first_pending->m_pending_type );
         break;
     }
 
+}
+
+void sdp_connection::process_pending_sdp_task( std::shared_ptr<sdp_task_pending> a_pending_tsk )
+{
+    switch( a_pending_tsk->m_pending_request->m_type )
+    {
+    case sdp_task_type::service_search_request:
+        search_service( std::static_pointer_cast<sdp_task_service_search_request>
+            ( a_pending_tsk->m_pending_request ) );
+        break;
+    default:
+        LogUtilError() << "pending task ignored with type: "
+            << static_cast<uint32_t>( a_pending_tsk->m_pending_request->m_type );
+        break;
+    };
 }
 
 }

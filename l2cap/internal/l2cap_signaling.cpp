@@ -593,12 +593,6 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             break;
         }
 
-        if( parsed_size > available_size )
-        {
-            LogUtilError() << "parsed_size exceeds available_size, corrupt packet";
-            break;
-        }
-
         if( get_acl_type() == acl_type::le_acl )
         {
             /* one signaling rqeust/response in one signaling packet on LE signaling channel.
@@ -1232,7 +1226,7 @@ uint16_t l2cap_signaling::handle_connection_response
 
     if( result == connection_req_result::connection_pending )
     {
-        if( data_size >= 10 )
+        if( data_size >= MIN_PAYLOAD_LEN )
         {
             status = static_cast<connection_req_refused_status>( le_to_host16( a_raw_sig + 10 ) );
         }

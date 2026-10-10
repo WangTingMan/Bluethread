@@ -794,7 +794,7 @@ void rfcomm_multipexer::accept_coming_connection_request
     bool a_accept
     )
 {
-    std::shared_ptr<rfcomm_port> port;
+    std::shared_ptr<rfcomm_port_connection> port;
     port = find_port( m_remote_address, a_port, false );
     if( port )
     {
@@ -809,7 +809,7 @@ void rfcomm_multipexer::accept_coming_connection_request
 
 void rfcomm_multipexer::disconnect( uint8_t a_port, bool a_port_on_local )
 {
-    std::shared_ptr<rfcomm_port> port;
+    std::shared_ptr<rfcomm_port_connection> port;
     port = find_port( m_remote_address, a_port, a_port_on_local );
     if( port )
     {
@@ -829,7 +829,7 @@ void rfcomm_multipexer::send_port_user_data
     std::shared_ptr<std::vector<uint8_t>> a_spp_data
     )
 {
-    std::shared_ptr<rfcomm_port> port;
+    std::shared_ptr<rfcomm_port_connection> port;
     port = find_port( m_remote_address, a_port, a_port_on_local );
     if( port )
     {
@@ -1025,7 +1025,7 @@ void rfcomm_multipexer::handle_uih_frame
         }
 
         uint8_t port = a_header.get_port();
-        std::shared_ptr<rfcomm_port> p_port = find_port( remote_address, port, local_inited );
+        std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
         if( p_port )
         {
             p_port->handle_received_uih_data( a_hci_data, a_header );
@@ -1088,7 +1088,7 @@ void rfcomm_multipexer::handle_multipexer_pn
 
     uint8_t port = a_pn->get_port();
 
-    std::shared_ptr<rfcomm_port> p_port = find_port( remote_address, port, local_inited );
+    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
     if( !p_port )
     {
         if( !m_idle_ports.empty() )
@@ -1100,8 +1100,8 @@ void rfcomm_multipexer::handle_multipexer_pn
         }
         else
         {
-            LogUtilInfo() << "Allocate a new rfcomm_port to handle coming UIH PN";
-            p_port = std::make_shared<rfcomm_port>();
+            LogUtilInfo() << "Allocate a new rfcomm_port_connection to handle coming UIH PN";
+            p_port = std::make_shared<rfcomm_port_connection>();
             m_worked_ports.emplace_back( p_port );
         }
         p_port->set_dlci( a_pn->get_dlci() );
@@ -1145,7 +1145,7 @@ void rfcomm_multipexer::handle_multipexer_msc
 
     uint8_t port = a_msc->get_port();
 
-    std::shared_ptr<rfcomm_port> p_port = find_port( remote_address, port, local_inited );
+    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
     if( !p_port )
     {
         LogUtilError() << "No port entity for this port connection. address: " << remote_address.to_string()
@@ -1290,7 +1290,7 @@ void rfcomm_multipexer::send_port_data( rfcomm_header a_header, uint8_t* a_buffe
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 
-std::shared_ptr<rfcomm_port> rfcomm_multipexer::find_port
+std::shared_ptr<rfcomm_port_connection> rfcomm_multipexer::find_port
     (
     bluetooth_address const& a_address,
     uint8_t const& a_port,

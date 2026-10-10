@@ -14,7 +14,7 @@
  * Commercial closed-source licenses are available upon request.
  */
 
-#include "rfcomm_port.h"
+#include "rfcomm_port_connection.h"
 #include "../rfcomm_module.h"
 
 #include "framework/log_util.h"
@@ -63,7 +63,7 @@ std::ostream& operator<<( std::ostream& a_os, rfcomm_port_state_type a_state )
     return a_os;
 }
 
-rfcomm_port_base_state::rfcomm_port_base_state( rfcomm_port& a_sm, rfcomm_port_state_type a_type )
+rfcomm_port_base_state::rfcomm_port_base_state( rfcomm_port_connection& a_sm, rfcomm_port_state_type a_type )
     : state_machine::abstract_state( a_sm, static_cast< uint32_t >( a_type ) )
     , m_rfcomm_port( a_sm )
 {
@@ -680,7 +680,7 @@ void rfcomm_port_open_state::on_exit()
 
 }
 
-rfcomm_port::rfcomm_port()
+rfcomm_port_connection::rfcomm_port_connection()
 {
     m_local_modem_status.m_data_valid = true;
     m_local_modem_status.m_flow_control_on = false;
@@ -703,7 +703,7 @@ rfcomm_port::rfcomm_port()
     start();
 }
 
-void rfcomm_port::handle_multipexer_disconnect()
+void rfcomm_port_connection::handle_multipexer_disconnect()
 {
     auto state = find_state( get_id() );
     auto rfc_state = std::static_pointer_cast<rfcomm_port_base_state>( state );
@@ -717,7 +717,7 @@ void rfcomm_port::handle_multipexer_disconnect()
     }
 }
 
-void rfcomm_port::disconnect()
+void rfcomm_port_connection::disconnect()
 {
     std::shared_ptr<rfcomm_port_event> event_ = std::make_shared<rfcomm_port_event>();
     event_->m_type = rfcomm_port_event_type::disconnect_port;
@@ -725,7 +725,7 @@ void rfcomm_port::disconnect()
     handle_event( event_ );
 }
 
-void rfcomm_port::send_user_data( std::shared_ptr<std::vector<uint8_t>> a_user_data )
+void rfcomm_port_connection::send_user_data( std::shared_ptr<std::vector<uint8_t>> a_user_data )
 {
     rfcomm_port_state_type state_type = static_cast<rfcomm_port_state_type> ( get_id() );
     if( rfcomm_port_state_type::open != state_type )
@@ -761,7 +761,7 @@ void rfcomm_port::send_user_data( std::shared_ptr<std::vector<uint8_t>> a_user_d
     }
 }
 
-void rfcomm_port::handle_accept_connection_request( bool a_accept )
+void rfcomm_port_connection::handle_accept_connection_request( bool a_accept )
 {
     std::shared_ptr<rfcomm_port_event> event_ = std::make_shared<rfcomm_port_event>();
     event_->m_type = a_accept ? rfcomm_port_event_type::accept_connection_request
@@ -770,7 +770,7 @@ void rfcomm_port::handle_accept_connection_request( bool a_accept )
     handle_event( event_ );
 }
 
-void rfcomm_port::handle_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn )
+void rfcomm_port_connection::handle_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn )
 {
     std::shared_ptr<rfcomm_port_event> event_ = std::make_shared<rfcomm_port_event>();
     event_->m_type = rfcomm_port_event_type::multipexer_message_type;
@@ -779,7 +779,7 @@ void rfcomm_port::handle_connection_request( std::shared_ptr<multipexer_pn_messa
     handle_event( event_ );
 }
 
-void rfcomm_port::handle_modem_status_message( std::shared_ptr<multipexer_msc_message> const& a_msc )
+void rfcomm_port_connection::handle_modem_status_message( std::shared_ptr<multipexer_msc_message> const& a_msc )
 {
     std::shared_ptr<rfcomm_port_event> event_ = std::make_shared<rfcomm_port_event>();
     event_->m_type = rfcomm_port_event_type::multipexer_message_type;
@@ -788,7 +788,7 @@ void rfcomm_port::handle_modem_status_message( std::shared_ptr<multipexer_msc_me
     handle_event( event_ );
 }
 
-void rfcomm_port::handle_controlling( rfcomm_header& a_header )
+void rfcomm_port_connection::handle_controlling( rfcomm_header& a_header )
 {
     std::shared_ptr<rfcomm_port_event> event_ = std::make_shared<rfcomm_port_event>();
     event_->m_type = rfcomm_port_event_type::controlling_message;
@@ -797,7 +797,7 @@ void rfcomm_port::handle_controlling( rfcomm_header& a_header )
     handle_event( event_ );
 }
 
-void rfcomm_port::handle_received_uih_data
+void rfcomm_port_connection::handle_received_uih_data
     (
     std::shared_ptr<hci_data> const& a_hci_data,
     rfcomm_header& a_header
@@ -811,7 +811,7 @@ void rfcomm_port::handle_received_uih_data
     handle_event( event_ );
 }
 
-void rfcomm_port::clear()
+void rfcomm_port_connection::clear()
 {
     m_local_inited = false;
     m_dlci = 0x00;
@@ -824,7 +824,7 @@ void rfcomm_port::clear()
     m_remote_modem_status_configed = false;
 }
 
-void rfcomm_port::handle_received_uih_data_internal
+void rfcomm_port_connection::handle_received_uih_data_internal
     (
     std::shared_ptr<hci_data> const& a_hci_data,
     rfcomm_header& a_header
@@ -874,12 +874,12 @@ void rfcomm_port::handle_received_uih_data_internal
     }
 }
 
-void rfcomm_port::force_send_local_credit()
+void rfcomm_port_connection::force_send_local_credit()
 {
     send_user_data( nullptr );
 }
 
-void rfcomm_port::accept_connection_request( bool a_accept )
+void rfcomm_port_connection::accept_connection_request( bool a_accept )
 {
     rfcomm_header header_send;
     if( a_accept )

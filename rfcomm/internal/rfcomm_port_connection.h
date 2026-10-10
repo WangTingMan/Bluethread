@@ -29,7 +29,7 @@
 namespace bluetooth
 {
 
-class rfcomm_port;
+class rfcomm_port_connection;
 
 enum class rfcomm_port_state_type : uint8_t
 {
@@ -81,9 +81,9 @@ class rfcomm_port_base_state : public state_machine::abstract_state
 
 public:
 
-    rfcomm_port_base_state( rfcomm_port& a_sm, rfcomm_port_state_type a_type );
+    rfcomm_port_base_state( rfcomm_port_connection& a_sm, rfcomm_port_state_type a_type );
 
-    rfcomm_port& get_port()const
+    rfcomm_port_connection& get_port()const
     {
         return m_rfcomm_port;
     }
@@ -92,7 +92,7 @@ public:
 
 private:
 
-    rfcomm_port& m_rfcomm_port;
+    rfcomm_port_connection& m_rfcomm_port;
 
 };
 
@@ -101,7 +101,7 @@ class rfcomm_port_idle_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_idle_state( rfcomm_port& a_sm )
+    rfcomm_port_idle_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::idle_state )
     {
 
@@ -127,7 +127,7 @@ class rfcomm_port_wait_sabm_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_wait_sabm_state( rfcomm_port& a_sm )
+    rfcomm_port_wait_sabm_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::wait_sabm_state )
     {
 
@@ -149,7 +149,7 @@ class rfcomm_port_wait_pn_rsp_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_wait_pn_rsp_state( rfcomm_port& a_sm )
+    rfcomm_port_wait_pn_rsp_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::wait_pn_rsp_state )
     {
 
@@ -171,7 +171,7 @@ class rfcomm_port_modem_config_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_modem_config_state( rfcomm_port& a_sm )
+    rfcomm_port_modem_config_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::modem_config_state )
     {
 
@@ -197,7 +197,7 @@ class rfcomm_port_sabm_wait_ua_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_sabm_wait_ua_state( rfcomm_port& a_sm )
+    rfcomm_port_sabm_wait_ua_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::sabm_wait_ua_state )
     {
 
@@ -219,7 +219,7 @@ class rfcomm_port_disc_wait_ua_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_disc_wait_ua_state( rfcomm_port& a_sm )
+    rfcomm_port_disc_wait_ua_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::disc_wait_ua_state )
     {
 
@@ -241,7 +241,7 @@ class rfcomm_port_open_state : public rfcomm_port_base_state
 
 public:
 
-    rfcomm_port_open_state( rfcomm_port& a_sm )
+    rfcomm_port_open_state( rfcomm_port_connection& a_sm )
         : rfcomm_port_base_state( a_sm, rfcomm_port_state_type::open )
     {
 
@@ -258,7 +258,7 @@ protected:
     void on_exit()override;
 };
 
-class rfcomm_port : public state_machine
+class rfcomm_port_connection : public state_machine
 {
     friend class rfcomm_port_idle_state;
     friend class rfcomm_port_wait_sabm_state;
@@ -271,7 +271,7 @@ class rfcomm_port : public state_machine
 
 public:
 
-    rfcomm_port();
+    rfcomm_port_connection();
 
     bool local_inited()const
     {

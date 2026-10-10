@@ -21,7 +21,7 @@
 
 #include "data_element.h" 
 #include "../rfcomm_protocol.h"
-#include "rfcomm_port.h"
+#include "rfcomm_port_connection.h"
 #include "bluetooth_address.h"
 
 #include "../common/state_machine.h"
@@ -381,7 +381,7 @@ private:
      */
     void send_port_data( rfcomm_header, uint8_t*, uint16_t );
 
-    std::shared_ptr<rfcomm_port> find_port
+    std::shared_ptr<rfcomm_port_connection> find_port
         (
         bluetooth_address const& a_address,
         uint8_t const& a_port,
@@ -399,8 +399,8 @@ private:
     bool m_wait_config_rsp_flag = false; // true if we wait for config rsp from remote device
     bool m_remote_configured = false;
     bool m_local_inited = false;
-    std::vector<std::shared_ptr<rfcomm_port>> m_worked_ports;
-    std::vector<std::shared_ptr<rfcomm_port>> m_idle_ports;
+    std::vector<std::shared_ptr<rfcomm_port_connection>> m_worked_ports;
+    std::vector<std::shared_ptr<rfcomm_port_connection>> m_idle_ports;
     std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool )> m_callback_finder;
 };
 

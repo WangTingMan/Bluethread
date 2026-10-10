@@ -358,11 +358,6 @@ void disconnect( bluetooth_address a_address )
 
 void connect( bluetooth_address a_address )
 {
-    std::vector<bluetooth::uuid> uuids;
-    uuids.push_back( bluetooth::uuid::from_16bit( 0x0100 ) );
-    sdp::search_service( a_address, uuids );
-    return;
-
     std::shared_ptr<bluetooth::spp_module::spp_task> task;
     task = std::make_shared<bluetooth::spp_module::spp_task>();
     task->m_type = bluetooth::spp_task_type::connect_default_spp;

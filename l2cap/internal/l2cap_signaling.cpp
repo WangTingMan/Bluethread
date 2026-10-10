@@ -584,6 +584,13 @@ void l2cap_signaling::handle_incoming_signaling( std::shared_ptr<hci_data> const
             break;
         }
 
+        if( parsed_size > available_size )
+        {
+            LogUtilError() << "parsed_size exceeds available_size, corrupt packet"
+                << " may crash here...";
+            break;
+        }
+
         raw_sig_ptr += parsed_size;
         available_size -= parsed_size;
 

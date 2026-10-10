@@ -92,6 +92,8 @@ public:
 
     void remove_connection( bluetooth_address const& a_address );
 
+    void handle_connection_status_monitor_timeout( sdp_connection* a_connection );
+
 private:
 
     bool verify_received_packet

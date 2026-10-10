@@ -16,11 +16,15 @@
 #include "endian_convert.h"
 #include "sdp_connection.h"
 #include "sdp_manager.h"
+#include "sdp/sdp_module.h"
 
+#include <framework/framework_manager.h>
 #include <framework/log_util.h>
 
 namespace bluetooth
 {
+
+constexpr std::chrono::milliseconds s_connection_monitor_timeout = std::chrono::seconds( 10 );
 
 std::vector<uint8_t> make_continuation( void* a_continue_pointer )
 {
@@ -47,13 +51,67 @@ bool exact_pointer_from_continuation( std::vector<uint8_t>const& a_continue_buff
     return true;
 }
 
+sdp_connection::~sdp_connection()
+{
+    LogUtilDebug() << "destory sdp connection for deivce: " << m_address.to_string();
+    if( m_connection_status_watch_timer != 0 )
+    {
+        auto _module = framework::framework_manager::get_instance()
+            .get_module_manager().get_module( framework::abstract_module::s_timer_module_name );
+        auto _timer_module = std::static_pointer_cast<framework::timer_module>( _module );
+        _timer_module->undregister_timer( m_connection_status_watch_timer );
+        m_connection_status_watch_timer = 0;
+    }
+}
+
 bool sdp_connection::set_connection_status( connection_status a_connection_status )
 {
+    m_connection_status_changed_time = framework::timer_module::get_system_booting_time();
     bool ret = ( m_connection_status != a_connection_status );
     m_connection_status = a_connection_status;
-    if( m_connection_status == connection_status::connected )
+    bool to_create_monitor_timer = false;
+    bool to_delete_monitor_timer = false;
+    switch( m_connection_status )
     {
+    case connection_status::connected:
+        to_delete_monitor_timer = true;
         process_next_pending_request();
+        break;
+    case connection_status::disconnected:
+        to_delete_monitor_timer = true;
+        break;
+    default:
+        to_create_monitor_timer = true;
+        break;
+    }
+
+    if( to_create_monitor_timer || to_delete_monitor_timer )
+    {
+        auto _module = framework::framework_manager::get_instance()
+            .get_module_manager().get_module( framework::abstract_module::s_timer_module_name );
+        auto _timer_module = std::static_pointer_cast<framework::timer_module>( _module );
+
+        if( to_delete_monitor_timer )
+        {
+            _timer_module->undregister_timer( m_connection_status_watch_timer );
+            m_connection_status_watch_timer = 0;
+        }
+        else if( to_create_monitor_timer )
+        {
+            if( m_connection_status_watch_timer == 0 )
+            {
+                auto fun = [sdp_manager_ = m_sdp_manager, remote = m_address, _thiz = this]( uint32_t a_id, std::string )
+                    {
+                        LogUtilDebug() << "connection time out for device " << remote.to_string()
+                            << ", timer id: " << a_id;
+                        sdp_manager_->handle_connection_status_monitor_timeout( _thiz );
+                    };
+                m_connection_status_watch_timer = _timer_module->register_timer
+                    ( fun, s_connection_monitor_timeout, 1, sdp_module::s_sdp_module_name );
+                LogUtilDebug() << "create connection status monitor timer for "
+                    << m_address.to_string() << ", timer id: " << m_connection_status_watch_timer;
+            }
+        }
     }
     return ret;
 }

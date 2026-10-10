@@ -140,6 +140,11 @@ enum class sdp_self_service_attribute_id : uint16_t
     service_database_state = 0x0201
 };
 
+enum class sdp_browse_group_uuid : uint16_t
+{
+    public_browse_group = 0x1002,
+};
+
 enum class sdp_attribute_value_type : uint8_t
 {
     null = 0x00,

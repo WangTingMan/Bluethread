@@ -21,6 +21,8 @@
 #include "sdp_protocol.h"
 #include "sdp/sdp_task.h"
 
+#include "framework/timer_module.h"
+
 namespace bluetooth
 {
 
@@ -80,6 +82,8 @@ public:
     {
 
     }
+
+    ~sdp_connection();
 
     void set_sdp_manager( sdp_manager* a_sdp_manager )
     {
@@ -270,6 +274,9 @@ private:
     void process_pending_sdp_task( std::shared_ptr<sdp_task_pending> a_pending_tsk );
 
     connection_status m_connection_status = connection_status::disconnected;
+    int64_t m_connection_status_changed_time = 0;
+    uint32_t m_connection_status_watch_timer = 0;
+
     uint16_t m_next_transaction_id = 0;
     bool m_config_local_req_sent = false; // whether sent local config request to remote device
     bool m_config_local_rsp_received = false; // whether received local config response from remote device

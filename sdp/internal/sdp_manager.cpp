@@ -741,6 +741,19 @@ void sdp_manager::remove_connection( bluetooth_address const& a_address )
     }
 }
 
+void sdp_manager::handle_connection_status_monitor_timeout( sdp_connection* a_connection )
+{
+    for( auto it = m_connections.begin(); it != m_connections.end(); ++it )
+    {
+        auto& _con = *it;
+        if( _con.get() == a_connection )
+        {
+            m_connections.erase( it );
+            break;
+        }
+    }
+}
+
 bool sdp_manager::verify_received_packet
     (
     sdp_header& a_sdp_header,

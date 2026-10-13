@@ -469,7 +469,7 @@ namespace bluetooth
         }
         else
         {
-            LogUtilDebug() << "No channel statemachine for local channel: " << a_tsk->m_local_cid;
+            LogUtilError() << "No channel statemachine for local channel: " << a_tsk->m_local_cid;
         }
     }
 

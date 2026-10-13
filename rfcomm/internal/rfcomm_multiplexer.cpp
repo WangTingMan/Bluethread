@@ -131,7 +131,7 @@ bool rfcomm_multipexer_idle::handle_event( std::shared_ptr<state_machine::abstra
     switch( rfc_event->m_type )
     {
     case rfcomm_event_type::start_request:
-        get_multipexer().connect();
+        get_multipexer().connect( rfc_event->m_address );
         transition_to_state( rfcomm_multipexer_state_type::wait_conn_cnf );
         break;
     case rfcomm_event_type::l2cap_signaling_message:
@@ -788,7 +788,7 @@ uint16_t rfcomm_multipexer::get_local_cid()
     return m_local_cid;
 }
 
-void rfcomm_multipexer::accept_coming_connection_request
+void rfcomm_multipexer::do_accept_coming_connection_request
     (
     uint8_t a_port,
     bool a_accept
@@ -1038,9 +1038,13 @@ void rfcomm_multipexer::handle_uih_frame
     }
 }
 
-void rfcomm_multipexer::connect()
+void rfcomm_multipexer::connect( bluetooth_address a_remote_device )
 {
-    // TODO make a l2cap channel connection
+    auto l2cap_con_req = std::make_shared<l2cap_task_connection_request>();
+    l2cap_con_req->set_source_module( rfcomm_module::s_rfcomm_module_name );
+    l2cap_con_req->m_remote_device = a_remote_device;
+    l2cap_con_req->m_psm = defined_l2cap_psm::rfcomm;
+    framework_manager::get_instance().get_thread_manager().post_task( l2cap_con_req, framework::source_here );
 }
 
 void rfcomm_multipexer::config_local_channel( uint16_t a_acl_handle, uint16_t a_remote_cid )

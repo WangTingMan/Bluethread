@@ -44,7 +44,7 @@ enum class rfcomm_multipexer_state_type : uint8_t
 enum class rfcomm_event_type : uint8_t
 {
     start_request = 0x00, // upper layer wants to start the multipexer
-                          // to specified remote device
+                          // m_address as specified remote device
     l2cap_signaling_message = 0x01, // remote device wants to connect with local rfcomm,
                                      // m_signaling_pkt is valid
     multipexer_controlling = 0x02, // rfcomm multipexer contolling signlaing( one of sabm, disc, dm, ua, and uih ).
@@ -303,7 +303,7 @@ public:
         m_remote_address = a_address;
     }
 
-    void accept_coming_connection_request
+    void do_accept_coming_connection_request
         (
         uint8_t a_port,
         bool a_accept = true
@@ -358,7 +358,7 @@ private:
         rfcomm_header& a_header
         );
 
-    void connect();
+    void connect( bluetooth_address a_remote_device );
 
     void config_local_channel( uint16_t a_acl_handle, uint16_t a_remote_cid );
 

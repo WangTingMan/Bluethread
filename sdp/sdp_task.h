@@ -99,6 +99,9 @@ public:
     std::vector<uuid> m_service_uuid;
     std::vector<uint16_t> m_attribute_id_list;
     std::vector<std::pair<uint16_t, uint16_t>> m_requested_id_ranges;
+
+    std::string m_callback_handle_module;
+    std::function<void( std::vector<sdp_data_element> )> m_searching_result_callback;
 };
 
 }

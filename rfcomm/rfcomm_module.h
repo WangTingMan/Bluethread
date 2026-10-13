@@ -21,9 +21,12 @@
 #include "data_element.h"
 
 #include "../l2cap/l2cap_common.h"
+#include "sdp/sdp_data_element.h"
 
 #include "internal/rfcomm_multiplexer.h"
 #include "rfcomm_common.h"
+#include "rfcomm_task.h"
+#include "uuid.h"
 
 #include <vector>
 #include <shared_mutex>
@@ -34,43 +37,12 @@ namespace bluetooth
 
 using rfcomm_port_callback = std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool )>;
 
-enum class rfcomm_task_type : uint8_t
-{
-    invalid_type = 0x00,
-    accept_coming_connection_request = 0x01, /** accept coming connection request. parameter address indicate the
-                                             * remote device' address, and port indicate which port to accept
-                                             */
-    reject_coming_connection_request = 0x02, /** accept coming connection request. parameter address indicate the
-                                             * remote device' address, and port indicate which port to accept
-                                             */
-    disconnect_specified_port = 0x03, /** disconnect specified device's connected specified port
-                                        * address, port and port_on_local are valid
-                                        */
-    async_send_spp_data = 0x04, /**
-                                * Send spp port data to remote device. address, port, port_on_local and
-                                * spp_data are valid
-                                */
-};
-
 class rfcomm_module : public framework::abstract_module
 {
 
 public:
 
     constexpr static const char* s_rfcomm_module_name = "rfcomm_module";
-
-    class rfcomm_task : public framework::abstract_task
-    {
-
-    public:
-
-        rfcomm_task_type m_type = rfcomm_task_type::invalid_type;
-
-        bluetooth_address address;
-        uint8_t port;
-        bool port_on_local;
-        std::shared_ptr<std::vector<uint8_t>> spp_data;
-    };
 
     rfcomm_module();
 
@@ -109,6 +81,15 @@ private:
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
         (
         uint16_t a_acl_handle
+        );
+
+    void connect( bluetooth_address a_address, std::vector<uuid> a_uuid );
+
+    void handle_service_attribute_search_result
+        (
+        bluetooth_address a_address,
+        std::vector<uuid> a_uuid,
+        std::vector<sdp_data_element> a_attributes
         );
 
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_remote( bluetooth_address const& a_address );

@@ -22,6 +22,7 @@
 
 #include "../l2cap/l2cap_module.h"
 #include "../l2cap/l2cap_common.h"
+#include "sdp/sdp_task.h"
 
 #include "../common/acl_connections_db.h"
 
@@ -39,6 +40,8 @@ rfcomm_module::rfcomm_module()
 
 void rfcomm_module::initialize()
 {
+    rfcomm_task::s_rfcomm_task_type_id = framework_manager::get_instance().register_task_type( 1 );
+
     auto mod = framework_manager::get_instance().get_module_manager().get_module
         ( l2cap_module::s_l2cap_module_name );
     auto l2cap_mod = static_pointer_cast< l2cap_module >( mod );
@@ -65,8 +68,18 @@ void rfcomm_module::deinitialize()
 
 void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
 {
-    std::shared_ptr<rfcomm_module::rfcomm_task> detail_tsk;
-    detail_tsk = std::static_pointer_cast<rfcomm_module::rfcomm_task>( a_task );
+    if( uint16_t( a_task->get_task_type() ) != rfcomm_task::s_rfcomm_task_type_id )
+    {
+        LogUtilWarning() << "Task type not match: "
+            << static_cast<uint16_t>( a_task->get_task_type() )
+            << " != "
+            << rfcomm_task::s_rfcomm_task_type_id
+            << "from: " << a_task->get_position();
+        return;
+    }
+
+    std::shared_ptr<rfcomm_task> detail_tsk;
+    detail_tsk = std::static_pointer_cast<rfcomm_task>( a_task );
     if( !detail_tsk )
     {
         LogUtilError() << "Unknown task type";
@@ -77,47 +90,65 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
     switch( detail_tsk->m_type )
     {
     case rfcomm_task_type::accept_coming_connection_request:
-        mulx = find_multipexer_by_remote( detail_tsk->address );
-        if( mulx )
         {
-            mulx->accept_coming_connection_request( detail_tsk->port );
-        }
-        else
-        {
-            LogUtilError() << "No multipexer for address: " << detail_tsk->address.to_string();
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_accept_coming_connection_request>( detail_tsk );
+            mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
+            if( mulx )
+            {
+                mulx->do_accept_coming_connection_request( rfc_detail_tsk->port );
+            }
+            else
+            {
+                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+            }
         }
         break;
     case rfcomm_task_type::reject_coming_connection_request:
-        mulx = find_multipexer_by_remote( detail_tsk->address );
-        if( mulx )
         {
-            mulx->accept_coming_connection_request( detail_tsk->port, false );
-        }
-        else
-        {
-            LogUtilError() << "No multipexer for address: " << detail_tsk->address.to_string();
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_reject_coming_connection_request>( detail_tsk );
+            mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
+            if( mulx )
+            {
+                mulx->do_accept_coming_connection_request( rfc_detail_tsk->port, false );
+            }
+            else
+            {
+                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+            }
         }
         break;
     case rfcomm_task_type::disconnect_specified_port:
-        mulx = find_multipexer_by_remote( detail_tsk->address );
-        if( mulx )
         {
-            mulx->disconnect( detail_tsk->port, detail_tsk->port_on_local );
-        }
-        else
-        {
-            LogUtilError() << "No multipexer for address: " << detail_tsk->address.to_string();
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_disconnect_specified_port>( detail_tsk );
+            mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
+            if( mulx )
+            {
+                mulx->disconnect( rfc_detail_tsk->port, rfc_detail_tsk->port_on_local );
+            }
+            else
+            {
+                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+            }
         }
         break;
     case rfcomm_task_type::async_send_spp_data:
-        mulx = find_multipexer_by_remote( detail_tsk->address );
-        if( mulx )
         {
-            mulx->send_port_user_data( detail_tsk->port, detail_tsk->port_on_local, std::move( detail_tsk->spp_data ) );
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_async_send_spp_data>( detail_tsk );
+            mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
+            if( mulx )
+            {
+                mulx->send_port_user_data( rfc_detail_tsk->port, rfc_detail_tsk->port_on_local, std::move( rfc_detail_tsk->spp_data ) );
+            }
+            else
+            {
+                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+            }
         }
-        else
+        break;
+    case rfcomm_task_type::connect_specific_uuid:
         {
-            LogUtilError() << "No multipexer for address: " << detail_tsk->address.to_string();
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_connect_specific_uuid>( detail_tsk );
+            connect( rfc_detail_tsk->address, rfc_detail_tsk->uuids );
         }
         break;
     default:
@@ -305,6 +336,13 @@ void rfcomm_module::handle_connection_state_changed
 
 void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
 {
+    static int i = 0;
+    i++;
+    if( i == 3 )
+    {
+        i = 90;
+    }
+
     if( a_hci->m_type != uart_hci_type::acl_type )
     {
         LogUtilError( "not ACL type HCI packet" );
@@ -346,6 +384,31 @@ std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_acl_handle
     }
 
     return nullptr;
+}
+
+void rfcomm_module::connect( bluetooth_address a_address, std::vector<uuid> a_uuid )
+{
+    std::shared_ptr<sdp_task_service_search_attribute> tsk;
+    tsk = std::make_shared<sdp_task_service_search_attribute>();
+    tsk->m_remote_device = a_address;
+    tsk->m_service_uuid = a_uuid;
+    tsk->set_source_module( get_name() );
+    tsk->m_callback_handle_module = s_rfcomm_module_name;
+    tsk->m_searching_result_callback = std::bind
+        ( &rfcomm_module::handle_service_attribute_search_result, this,
+          a_address, a_uuid, std::placeholders::_1 );
+
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+}
+
+void rfcomm_module::handle_service_attribute_search_result
+    (
+    bluetooth_address a_address,
+    std::vector<uuid> a_uuid,
+    std::vector<sdp_data_element> a_attributes
+    )
+{
+
 }
 
 std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_remote( bluetooth_address const& a_address )

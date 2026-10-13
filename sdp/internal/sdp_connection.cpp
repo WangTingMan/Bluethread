@@ -138,6 +138,30 @@ void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_req
     m_sdp_manager->send_packet( request, m_address );
 }
 
+void sdp_connection::search_service_attribute( std::shared_ptr<sdp_task_service_search_attribute> a_service_search )
+{
+    if( m_connection_status != connection_status::connected ||
+        m_current_pending_request )
+    {
+        auto sdp_tsk = std::make_shared<sdp_task_pending>();
+        sdp_tsk->m_pending_request = a_service_search;
+        m_pending_tasks.push_back( sdp_tsk );
+        return;
+    }
+
+    std::shared_ptr<sdp_service_search_attribute_req> request;
+    request = std::make_shared<sdp_service_search_attribute_req>();
+    request->m_transaction_id = m_next_transaction_id++;
+    request->m_remote_device = a_service_search->m_remote_device;
+    request->m_local_cid = m_local_cid;
+    request->m_max_return_count = 0xFF;
+    request->m_matching_uuids = a_service_search->m_service_uuid;
+    request->m_matching_ids = a_service_search->m_attribute_id_list;
+    request->m_requested_id_ranges = a_service_search->m_requested_id_ranges;
+    m_current_pending_request = request;
+    m_sdp_manager->send_packet( request, m_address );
+}
+
 void sdp_connection::search_service_by_handle( uint32_t a_handle )
 {
     if( m_connection_status != connection_status::connected ||
@@ -628,6 +652,11 @@ void sdp_connection::process_pending_sdp_task( std::shared_ptr<sdp_task_pending>
     case sdp_task_type::service_search_request:
         search_service( std::static_pointer_cast<sdp_task_service_search_request>
             ( a_pending_tsk->m_pending_request ) );
+        break;
+    case sdp_task_type::service_search_attribute:
+        search_service_attribute( std::static_pointer_cast<sdp_task_service_search_attribute>
+            ( a_pending_tsk->m_pending_request ) );
+        break;
         break;
     default:
         LogUtilError() << "pending task ignored with type: "

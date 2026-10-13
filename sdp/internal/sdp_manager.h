@@ -73,7 +73,7 @@ public:
     /**
      * Handle the service search attribute request from upper layer
      */
-    void handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task );
+    void do_service_search_attribute( std::shared_ptr<sdp_task> const& a_task );
 
     void send_packet
         (

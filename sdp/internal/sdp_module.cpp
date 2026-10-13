@@ -101,7 +101,7 @@ void sdp_module::handle_task( std::shared_ptr<abstract_task> a_task )
         m_sdp_manager->service_search( detail_task );
         break;
     case sdp_task_type::service_search_attribute:
-        m_sdp_manager->handle_service_search_attribute_host( detail_task );
+        m_sdp_manager->do_service_search_attribute( detail_task );
         break;
     default:
         LogUtilError() << "sdp task type ignored: " << static_cast< uint32_t >( detail_task->m_type );

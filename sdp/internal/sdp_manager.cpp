@@ -406,7 +406,7 @@ void sdp_manager::service_search( std::shared_ptr<sdp_task> const& a_task )
     con->search_service( detail_tsk );
 }
 
-void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task> const& a_task )
+void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& a_task )
 {
     auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>( a_task );
 
@@ -416,6 +416,10 @@ void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task
         return;
     }
 
+    if( detail_tsk->m_attribute_id_list.empty() && detail_tsk->m_requested_id_ranges.empty() )
+    {
+        detail_tsk->m_requested_id_ranges.push_back( { 0x0000,0xFFFF } );
+    }
     std::shared_ptr<sdp_service_search_attribute_req> request;
     request = std::make_shared<sdp_service_search_attribute_req>();
     request->m_matching_uuids = detail_tsk->m_service_uuid;
@@ -425,11 +429,7 @@ void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task
     request->m_remote_device = detail_tsk->m_remote_device;
 
     auto conn_ = find_connection( detail_tsk->m_remote_device );
-    if( conn_ )
-    {
-        //todo : execute the resut
-    }
-    else
+    if( !conn_ )
     {
         std::shared_ptr<l2cap_task_connection_request> tsk;
         tsk = std::make_shared<l2cap_task_connection_request>();
@@ -444,9 +444,9 @@ void sdp_manager::handle_service_search_attribute_host( std::shared_ptr<sdp_task
         sdp_conn->m_address = detail_tsk->m_remote_device;
         sdp_conn->set_connection_status( connection_status::connecting );
         m_connections.push_back( sdp_conn );
-
-        m_pending_reqs.push_back( request );
+        conn_ = sdp_conn;
     }
+    conn_->search_service_attribute( detail_tsk );
 }
 
 void sdp_manager::send_packet
@@ -652,22 +652,67 @@ void sdp_manager::send_packet
         break;
     case sdp_pdu_id::sdp_service_search_attr_req:
     {
+        LogUtilDebug() << "to send SDP_SERVICE_SEARCH_ATTR_REQ";
+
         std::shared_ptr<sdp_service_search_attribute_req> req;
         req = std::static_pointer_cast<sdp_service_search_attribute_req>( a_packet );
-        for( auto& ele : m_connections )
-        {
-            if( ele->m_address == req->m_remote_device )
-            {
-                local_cid = ele->m_local_cid;
-                break;
-            }
-        }
-
+        local_cid = req->m_local_cid;
         hci_packet = std::make_shared<hci_data>();
-        /**
-         * todo: need handle request: sdp_pdu_id::sdp_service_search_attr_req.
-         */
-        LogUtilFatal( "need handle request: sdp_pdu_id::sdp_service_search_attr_req." );
+
+        sdp_data_element data_element;
+        std::vector<sdp_data_element> uuid_elements;
+        for( auto& uuid : req->m_matching_uuids )
+        {
+            sdp_data_element uuid_ele;
+            uuid_ele.set_uuid( uuid );
+            uuid_elements.push_back( std::move( uuid_ele ) );
+        }
+        data_element.set_elements( std::move( uuid_elements ) );
+        auto uuid_data_element_raw = data_element.get_raw_buffer();
+
+        std::vector<sdp_data_element> ids_elements;
+        data_element.clear();
+        for( auto& id : req->m_matching_ids )
+        {
+            sdp_data_element id_element;
+            id_element.set_uint16_value( id );
+            ids_elements.push_back( std::move( id_element ) );
+        }
+        for( auto& id_pair : req->m_requested_id_ranges )
+        {
+            sdp_data_element id_element;
+            uint16_t start = std::min( id_pair.first, id_pair.second );
+            uint16_t end = std::max( id_pair.first, id_pair.second );
+            uint32_t range = ( static_cast<uint32_t>( start ) << 16 ) | end;
+            id_element.set_uint32_value( range );
+            ids_elements.push_back( std::move( id_element ) );
+        }
+        data_element.set_elements( std::move( ids_elements ) );
+        auto id_data_element_raw = data_element.get_raw_buffer();
+
+        sdp_sdu_size = uuid_data_element_raw.size() /*ServiceSearchPattern*/ + 2 /*MaximumAttributeByteCount*/
+            + id_data_element_raw.size() /*AttributeIDList*/
+            + sizeof( uint8_t ) + req->m_continue_info.size();
+        size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
+        hci_packet->m_buffer.resize( hci_total_size );
+
+        // fill the sdp sdu field.
+        p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
+        /* write ServiceSearchPattern */
+        memcpy( p_sdp_sdu + offset, uuid_data_element_raw.data(), uuid_data_element_raw.size() );
+        offset += uuid_data_element_raw.size();
+        /*MaximumAttributeByteCount*/
+        write_be16( p_sdp_sdu + offset, req->m_max_return_count );
+        offset += 2;
+        /*AttributeIDList*/
+        memcpy( p_sdp_sdu + offset, id_data_element_raw.data(), id_data_element_raw.size() );
+        offset += id_data_element_raw.size();
+        /* write ContinuationState */
+        p_sdp_sdu[offset] = static_cast<uint8_t>( req->m_continue_info.size() );
+        offset += 1;
+        memcpy( p_sdp_sdu + offset, req->m_continue_info.data(), req->m_continue_info.size() );
+
+        _sdp_header.set_transcation_id( req->m_transaction_id );
     }
     break;
     default:

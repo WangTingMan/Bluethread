@@ -300,7 +300,16 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
 
 void connect_uuid( bluetooth_address a_address, char* uuids, uint8_t uuid_count )
 {
+    std::shared_ptr<bluetooth::spp_module::spp_task> task;
+    task = std::make_shared<bluetooth::spp_module::spp_task>();
+    task->m_address = a_address;
+    task->set_target_module( bluetooth::spp_module::s_spp_module_name );
 
+    if( uuids == nullptr || uuid_count == 0 )
+    {
+        task->m_type = bluetooth::spp_task_type::connect_default_spp;
+    }
+    framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void connect_port( bluetooth_address a_address, uint8_t port )
@@ -308,12 +317,13 @@ void connect_port( bluetooth_address a_address, uint8_t port )
 
 }
 
-void accept_coming_connection( bluetooth_address a_address, uint8_t port )
+void accept_coming_connection( bluetooth_address a_address, uint8_t a_port )
 {
-    std::shared_ptr<bluetooth::rfcomm_module::rfcomm_task> task;
-    task = std::make_shared<bluetooth::rfcomm_module::rfcomm_task>();
-    task->m_type = bluetooth::rfcomm_task_type::accept_coming_connection_request;
-    task->port = port;
+    LogUtilDebug() << "accept spp connection request from " << a_address.to_string()
+        << ", port : " << static_cast<uint32_t>( a_port );
+    std::shared_ptr<bluetooth::rfcomm_task_accept_coming_connection_request> task;
+    task = std::make_shared<bluetooth::rfcomm_task_accept_coming_connection_request>();
+    task->port = a_port;
     task->address = a_address;
     task->set_target_module( bluetooth::rfcomm_module::s_rfcomm_module_name );
 
@@ -322,9 +332,8 @@ void accept_coming_connection( bluetooth_address a_address, uint8_t port )
 
 void reject_coming_connection( bluetooth_address a_address, uint8_t port )
 {
-    std::shared_ptr<bluetooth::rfcomm_module::rfcomm_task> task;
-    task = std::make_shared<bluetooth::rfcomm_module::rfcomm_task>();
-    task->m_type = bluetooth::rfcomm_task_type::reject_coming_connection_request;
+    std::shared_ptr<bluetooth::rfcomm_task_reject_coming_connection_request> task;
+    task = std::make_shared<bluetooth::rfcomm_task_reject_coming_connection_request>();
     task->port = port;
     task->address = a_address;
     task->set_target_module( bluetooth::rfcomm_module::s_rfcomm_module_name );
@@ -336,7 +345,6 @@ void disconnect_port( bluetooth_address a_address, uint8_t a_port, bool a_port_o
 {
     std::shared_ptr<bluetooth::spp_module::spp_task> task;
     task = std::make_shared<bluetooth::spp_module::spp_task>();
-    task->m_type = bluetooth::spp_task_type::disconnect_specified_port;
     task->m_port = a_port;
     task->m_address = a_address;
     task->m_port_on_local = a_port_on_local;

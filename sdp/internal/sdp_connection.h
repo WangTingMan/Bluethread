@@ -180,6 +180,8 @@ public:
 
     void search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search );
 
+    void search_service_attribute( std::shared_ptr<sdp_task_service_search_attribute> a_service_search );
+
     void search_service_by_handle( uint32_t a_handle );
 
 public:

@@ -191,15 +191,16 @@ void spp_module::handle_connection_request
     uint8_t a_port
     )
 {
-    std::shared_ptr<rfcomm_module::rfcomm_task> tsk;
+    LogUtilDebug() << "handle connection request from " << a_address.to_string()
+        << ", port : " << a_port;
+    std::shared_ptr<rfcomm_task_reject_coming_connection_request> tsk;
     auto connection_ = find( a_address, a_port, false );
     if( connection_ )
     {
         if( connection_->get_connection_status() != connection_status::disconnected )
         {
             LogUtilDebug() << "We already dial with the same remote device and same port. so reject such connection request";
-            tsk = std::make_shared<rfcomm_module::rfcomm_task>();
-            tsk->m_type = rfcomm_task_type::reject_coming_connection_request;
+            tsk = std::make_shared<rfcomm_task_reject_coming_connection_request>();
         }
     }
 
@@ -391,9 +392,8 @@ void spp_module::disconnect
 
     if( conection_->get_connection_status() == connection_status::connected )
     {
-        std::shared_ptr<bluetooth::rfcomm_module::rfcomm_task> task;
-        task = std::make_shared<bluetooth::rfcomm_module::rfcomm_task>();
-        task->m_type = bluetooth::rfcomm_task_type::disconnect_specified_port;
+        std::shared_ptr<rfcomm_task_disconnect_specified_port> task;
+        task = std::make_shared<rfcomm_task_disconnect_specified_port>();
         task->port = a_port;
         task->address = a_address;
         task->port_on_local = a_port_on_local;
@@ -423,9 +423,8 @@ void spp_module::disconnect
 
         if( ele->get_connection_status() == connection_status::connected )
         {
-            std::shared_ptr<bluetooth::rfcomm_module::rfcomm_task> task;
-            task = std::make_shared<bluetooth::rfcomm_module::rfcomm_task>();
-            task->m_type = bluetooth::rfcomm_task_type::disconnect_specified_port;
+            std::shared_ptr<rfcomm_task_disconnect_specified_port> task;
+            task = std::make_shared<rfcomm_task_disconnect_specified_port>();
             task->port = ele->get_port();
             task->address = ele->get_remote_device();
             task->port_on_local = ele->local_inited();
@@ -466,13 +465,11 @@ void spp_module::connect
 
     spp_conn->set_connection_status( connection_status::connecting );
 
-    std::shared_ptr<sdp_task_service_search_attribute> tsk;
-    tsk = std::make_shared<sdp_task_service_search_attribute>();
-    tsk->m_remote_device = a_address;
-    tsk->m_service_uuid.push_back( uuid::from_16bit( sdp_service_uuid::serial_port ) );
-    tsk->set_source_module( get_name() );
-
-    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+    auto rfc_tsk = std::make_shared<rfcomm_task_connect_specific_uuid>();
+    rfc_tsk->address = a_address;
+    rfc_tsk->uuids = uuids;
+    rfc_tsk->set_source_module( get_name() );
+    framework_manager::get_instance().get_thread_manager().post_task( rfc_tsk, framework::source_here );
     LogUtilInfo() << "Connect to defaule spp port with remote device " << a_address.to_string();
 }
 
@@ -500,9 +497,8 @@ void spp_module::send_port_data
         return;
     }
 
-    std::shared_ptr<bluetooth::rfcomm_module::rfcomm_task> task;
-    task = std::make_shared<bluetooth::rfcomm_module::rfcomm_task>();
-    task->m_type = bluetooth::rfcomm_task_type::async_send_spp_data;
+    std::shared_ptr<rfcomm_task_async_send_spp_data> task;
+    task = std::make_shared<rfcomm_task_async_send_spp_data>();
     task->port = a_port;
     task->address = a_address;
     task->port_on_local = a_local_inited;

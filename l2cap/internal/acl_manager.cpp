@@ -114,6 +114,11 @@ void acl_manager::remove_connection( uint16_t a_handle )
     if( m_acl_state_machines.empty() )
     {
         LogUtilInfo() << "All ACL connections have been disconnected, reset acl credit to max value.";
+        if( !m_controller )
+        {
+            LogUtilError() << "should not empty here!";
+            retrieve_controller_info();
+        }
         m_br_edr_acl_credit = m_controller->get_acl_total_credit_value();
         m_packet_recombinationer.clear();
     }
@@ -411,6 +416,11 @@ void acl_manager::handle_buffer_size_read_done()
     if( m_controller == nullptr )
     {
         LogUtilError() << "Controller information not available.";
+        if( !m_controller )
+        {
+            LogUtilError() << "should not empty here!";
+            retrieve_controller_info();
+        }
         return;
     }
     m_br_edr_acl_credit = m_controller->get_acl_total_credit_value();

@@ -283,6 +283,16 @@ public:
         m_local_cid = a_local_cid;
     }
 
+    uint16_t get_acl_handle()const
+    {
+        return m_acl_handle;
+    }
+
+    void set_acl_handle( uint16_t a_handle )
+    {
+        m_acl_handle = a_handle;
+    }
+
     bluetooth_address const& get_remote_device()const
     {
         return m_remote_address;
@@ -394,6 +404,7 @@ private:
     void check_working_port();
 
     uint16_t m_local_cid = 0x00;
+    uint16_t m_acl_handle = 0x00;
     uint16_t m_remote_mtu = 0x00; // remote device's mtu on this rfcomm channel.
     bluetooth_address m_remote_address; // remote device's address
     bool m_wait_config_rsp_flag = false; // true if we wait for config rsp from remote device

@@ -34,14 +34,14 @@ enum class rfcomm_frame_type : uint8_t
 
 enum class multipexer_message_type : uint8_t
 {
-    pn = 0x80 >> 2, // Parameter Negotiation
-    test = 0x20 >> 2, // test
-    fc_on = 0xA0 >> 2, // flow control on
-    fc_off = 0x60 >> 2, // flow control off
-    msc = 0xE0 >> 2, // Modem status Command
-    nsc = 0x10 >> 2, // non support command
-    rpn = 0x90 >> 2, // Remote Port Negotiation
-    rls= 0x50 >> 2, // remote line status
+    pn =        0x80 >> 2, // Parameter Negotiation
+    test =      0x20 >> 2, // test
+    fc_on =     0xA0 >> 2, // flow control on
+    fc_off =    0x60 >> 2, // flow control off
+    msc =       0xE0 >> 2, // Modem status Command
+    nsc =       0x10 >> 2, // non support command
+    rpn =       0x90 >> 2, // Remote Port Negotiation
+    rls =       0x50 >> 2, // remote line status
 };
 
 std::ostream& operator<<( std::ostream& a_os, rfcomm_frame_type a_type );

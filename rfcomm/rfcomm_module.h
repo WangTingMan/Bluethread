@@ -106,7 +106,10 @@ private:
 
     void handle_sdu( std::shared_ptr<hci_data> );
 
-    std::shared_ptr<rfcomm_multipexer> find_multipexer_by_local_cid( uint16_t a_local_cid );
+    std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
+        (
+        uint16_t a_acl_handle
+        );
 
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_remote( bluetooth_address const& a_address );
 

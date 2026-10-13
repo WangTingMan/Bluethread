@@ -169,10 +169,6 @@ void rfcomm_module::register_callback( rfcomm_port_callback_block a_callback )
 
 void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> const& a_request )
 {
-    /* TODO check the connection state first.If we already connected with the remote device,
-    * We need reject such connection request.
-    */
-
     auto acl_connections = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
     auto [address, has_address] = acl_connections->get_address( a_request->m_acl_handle );
@@ -182,7 +178,7 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
         return;
     }
 
-    std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_remote( address );
+    std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_acl_handle( a_request->m_acl_handle );
     if( mulx )
     {
         LogUtilInfo() << "We already have a rfcomm multupexer for remote device: " << address.to_string()
@@ -195,8 +191,6 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
         framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
         return;
     }
-
-    // TODO check the encryption state, reject if not encryptied
 
     LogUtilInfo() << "Allocate a new refcomm multipexer to handle the connection request: " << address.to_string();
 
@@ -212,6 +206,7 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
 
     m_working_multipexer.emplace_back( mulx );
     mulx->set_remote_device( address );
+    mulx->set_acl_handle( a_request->m_acl_handle );
     mulx->start();
     mulx->handle_channel_connection_request( a_request );
     mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
@@ -275,9 +270,14 @@ void rfcomm_module::handle_connection_state_changed
     {
         LogUtilError() << "no such multipexer entity for channel id: " << a_local_cid << ". state: "
             << a_state;
+        auto acl_db = framework_manager::get_instance().get_info_manager()
+            .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+        auto [acl, status] = acl_db->get_handle( a_address );
         mulx = std::make_shared<rfcomm_multipexer>();
         m_working_multipexer.emplace_back( mulx );
         mulx->set_local_cid( a_local_cid );
+        mulx->set_remote_device( a_address );
+        mulx->set_acl_handle( acl );
         mulx->start();
         mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
             std::placeholders::_1, std::placeholders::_2 ) );
@@ -305,9 +305,23 @@ void rfcomm_module::handle_connection_state_changed
 
 void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
 {
-    uint8_t* p_l2cap = a_hci->m_buffer.data();
-    uint16_t local_cid = le_to_host16( p_l2cap + 6 );
-    std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_local_cid( local_cid );
+    if( a_hci->m_type != uart_hci_type::acl_type )
+    {
+        LogUtilError( "not ACL type HCI packet" );
+        return;
+    }
+
+    l2cap_header _l2cap_header;
+    if( _l2cap_header.header_size() > a_hci->m_buffer.size() )
+    {
+        LogUtilError( "Invalid packet" );
+        return;
+    }
+    _l2cap_header.parse_from_raw_data( a_hci->m_buffer.data(), a_hci->m_buffer.size() );
+
+    uint16_t local_cid = _l2cap_header.get_channel_id();
+    uint16_t acl_handle = _l2cap_header.get_acl_handle();
+    std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_acl_handle( acl_handle );
     if( mulx )
     {
         mulx->handle_sdu( a_hci );
@@ -318,11 +332,14 @@ void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
     }
 }
 
-std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_local_cid( uint16_t a_local_cid )
+std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_acl_handle
+    (
+    uint16_t a_acl_handle
+    )
 {
     for( auto& ele : m_working_multipexer )
     {
-        if( ele->get_local_cid() == a_local_cid )
+        if( a_acl_handle == ele->get_acl_handle() )
         {
             return ele;
         }

@@ -18,10 +18,11 @@
 #include "uuid.h"
 #include "stack/stack_manager.h"
 #include "gap/gap_module.h"
-#include "rfcomm/spp_module.h"
+#include "spp/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
 #include "sdp/sdp_module.h"
 #include "sdp/sdp_task.h"
+#include "spp/spp_task.h"
 
 #include "framework/framework_manager.h"
 #include "framework/framework_event.h"
@@ -273,10 +274,9 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
 
     std::u8string name( reinterpret_cast< std::u8string::value_type const* >( parameter.service_name ) );
 
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
+    std::shared_ptr<bluetooth::spp_register_new_service_task> task;
+    task = std::make_shared<bluetooth::spp_register_new_service_task>();
     task->m_name = name;
-    task->m_type = bluetooth::spp_task_type::register_new_spp_service;
     task->m_uuids = std::move( uuids );
 
     task->set_target_module( bluetooth::spp_module::s_spp_module_name );
@@ -300,15 +300,11 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
 
 void connect_uuid( bluetooth_address a_address, char* uuids, uint8_t uuid_count )
 {
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
+    std::shared_ptr<bluetooth::spp_connect_default_spp_task> task;
+    task = std::make_shared<bluetooth::spp_connect_default_spp_task>();
     task->m_address = a_address;
     task->set_target_module( bluetooth::spp_module::s_spp_module_name );
 
-    if( uuids == nullptr || uuid_count == 0 )
-    {
-        task->m_type = bluetooth::spp_task_type::connect_default_spp;
-    }
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
@@ -343,8 +339,8 @@ void reject_coming_connection( bluetooth_address a_address, uint8_t port )
 
 void disconnect_port( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local )
 {
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
+    std::shared_ptr<bluetooth::spp_disconnect_specified_port_task> task;
+    task = std::make_shared<bluetooth::spp_disconnect_specified_port_task>();
     task->m_port = a_port;
     task->m_address = a_address;
     task->m_port_on_local = a_port_on_local;
@@ -355,9 +351,8 @@ void disconnect_port( bluetooth_address a_address, uint8_t a_port, bool a_port_o
 
 void disconnect( bluetooth_address a_address )
 {
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
-    task->m_type = bluetooth::spp_task_type::disconnect_specified_address;
+    std::shared_ptr<bluetooth::spp_disconnect_specified_address_task> task;
+    task = std::make_shared<bluetooth::spp_disconnect_specified_address_task>();
     task->m_address = a_address;
     task->set_target_module( bluetooth::spp_module::s_spp_module_name );
 
@@ -366,9 +361,8 @@ void disconnect( bluetooth_address a_address )
 
 void connect( bluetooth_address a_address )
 {
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
-    task->m_type = bluetooth::spp_task_type::connect_default_spp;
+    std::shared_ptr<bluetooth::spp_connect_default_spp_task> task;
+    task = std::make_shared<bluetooth::spp_connect_default_spp_task>();
     task->m_address = a_address;
     task->set_target_module( bluetooth::spp_module::s_spp_module_name );
 
@@ -377,9 +371,8 @@ void connect( bluetooth_address a_address )
 
 void send( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local, uint8_t* a_buffer, uint32_t a_size )
 {
-    std::shared_ptr<bluetooth::spp_module::spp_task> task;
-    task = std::make_shared<bluetooth::spp_module::spp_task>();
-    task->m_type = bluetooth::spp_task_type::async_send_spp_data;
+    std::shared_ptr<bluetooth::spp_async_send_spp_data_task> task;
+    task = std::make_shared<bluetooth::spp_async_send_spp_data_task>();
     task->m_address = a_address;
     task->m_port = a_port;
     task->m_port_on_local = a_port_on_local;

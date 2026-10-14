@@ -18,7 +18,7 @@
 #include "framework/log_util.h"
 
 #include "gap/gap_module.h"
-#include "rfcomm/spp_module.h"
+#include "spp/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
 #include "hci/hci_module.h"
 #include "hci/hci_snoop_module.h"
@@ -26,7 +26,6 @@
 #include "l2cap/l2cap_module.h"
 #include "gap/gap_module.h"
 #include "sdp/sdp_module.h"
-#include "rfcomm/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
 #include "config/config_module.h"
 

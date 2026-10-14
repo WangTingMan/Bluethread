@@ -15,8 +15,8 @@
  */
 
 #include "spp_module.h"
-#include "rfcomm_module.h"
-#include "rfcomm_common.h"
+#include "rfcomm/rfcomm_module.h"
+#include "rfcomm/rfcomm_common.h"
 #include "stack/stack_manager.h"
 
 #include "framework/log_util.h"
@@ -28,6 +28,7 @@
 #include "sdp/sdp_common.h"
 #include "sdp/sdp_module.h"
 #include "sdp/sdp_task.h"
+#include "spp/spp_task.h"
 
 static constexpr uint8_t s_spp_port_start = 10;
 
@@ -35,8 +36,6 @@ namespace bluetooth
 {
 
 using namespace framework;
-
-uint16_t spp_module::spp_task::s_spp_task_type_id = 0u;
 
 spp_module::spp_module()
 {
@@ -67,34 +66,49 @@ void spp_module::handle_task( std::shared_ptr<abstract_task> a_task )
         return;
     }
 
-    std::shared_ptr<spp_task> detail_task;
-    detail_task = std::static_pointer_cast<spp_task>( a_task );
-    if( !detail_task )
+    std::shared_ptr<spp_task> _spp_task;
+    _spp_task = std::static_pointer_cast<spp_task>( a_task );
+    if( !_spp_task )
     {
         LogUtilError() << "Wrong task type.";
         return;
     }
 
-    switch( detail_task->m_type )
+    switch( _spp_task->m_type )
     {
-    case spp_task_type::register_new_spp_service:
-        create_new_spp( detail_task->m_name, detail_task->m_uuids, detail_task->m_registered_callback );
+    case spp_task_type::spp_register_new_service:
+        {
+            auto detail_task = static_pointer_cast<spp_register_new_service_task>( _spp_task );
+            create_new_spp( detail_task->m_name, detail_task->m_uuids, detail_task->m_registered_callback );
+        }
         break;
-    case spp_task_type::disconnect_specified_port:
-        disconnect( detail_task->m_address, detail_task->m_port, detail_task->m_port_on_local );
+    case spp_task_type::spp_disconnect_specified_port:
+        {
+            auto detail_task = static_pointer_cast<spp_disconnect_specified_port_task>( _spp_task );
+            disconnect( detail_task->m_address, detail_task->m_port, detail_task->m_port_on_local );
+        }
         break;
-    case spp_task_type::disconnect_specified_address:
-        disconnect( detail_task->m_address );
+    case spp_task_type::spp_disconnect_specified_address:
+        {
+            auto detail_task = static_pointer_cast<spp_disconnect_specified_address_task>( _spp_task );
+            disconnect( detail_task->m_address );
+        }
         break;
-    case spp_task_type::connect_default_spp:
-        connect( detail_task->m_address );
+    case spp_task_type::spp_connect_default_spp:
+        {
+            auto detail_task = static_pointer_cast<spp_connect_default_spp_task>( _spp_task );
+            connect( detail_task->m_address );
+        }
         break;
-    case spp_task_type::async_send_spp_data:
-        send_port_data( detail_task->m_address, detail_task->m_port,
-            detail_task->m_port_on_local, std::move( detail_task->m_spp_data ) );
+    case spp_task_type::spp_async_send_spp_data:
+        {
+            auto detail_task = static_pointer_cast<spp_async_send_spp_data_task>( _spp_task );
+            send_port_data( detail_task->m_address, detail_task->m_port,
+                detail_task->m_port_on_local, std::move( detail_task->m_spp_data ) );
+        }
         break;
     default:
-        LogUtilError() << "sdp task type ignored: " << static_cast<uint32_t>( detail_task->m_type );
+        LogUtilError() << "sdp task type ignored: " << static_cast<uint32_t>( _spp_task->m_type );
     }
 }
 

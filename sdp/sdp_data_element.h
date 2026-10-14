@@ -18,6 +18,8 @@
 
 #include "sdp_common.h"
 
+#include <string>
+
 namespace bluetooth
 {
 

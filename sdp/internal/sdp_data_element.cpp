@@ -659,9 +659,15 @@ bool sdp_data_element::parse_elements_from
         return status;
     }
 
-    if( a_buffer == nullptr || a_size == 0 || a_depth >= a_max_depth )
+    if( a_buffer == nullptr || a_depth >= a_max_depth )
     {
         return false;
+    }
+
+    if( a_size == 0 )
+    {
+        /** sometime it is an empty element array. so we need return true here. not ERROR */
+        return true;
     }
 
     uint32_t parsed_size = 0;

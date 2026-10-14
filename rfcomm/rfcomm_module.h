@@ -89,7 +89,7 @@ private:
         (
         bluetooth_address a_address,
         std::vector<uuid> a_uuid,
-        std::vector<sdp_data_element> a_attributes
+        std::vector<sdp_data_element> a_service_records
         );
 
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_remote( bluetooth_address const& a_address );

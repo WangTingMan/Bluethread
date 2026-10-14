@@ -210,6 +210,12 @@ public:
         std::shared_ptr<sdp_service_search_attribute_req> const& a_request
         );
 
+    void handle_service_search_attribute_response
+        (
+        sdp_header& _sdp_header,
+        std::shared_ptr<sdp_service_search_attribute_response> const& a_request
+        );
+
     void handle_service_attribute_request
         (
         sdp_header& _sdp_header,
@@ -290,6 +296,7 @@ private:
     std::vector<std::shared_ptr<continuation_control_block>> m_conitues_buffers;
     std::vector<std::shared_ptr<pending_request>> m_pending_tasks;
     std::shared_ptr<sdp_protocol_base> m_current_pending_request;/*we already sent request pdu to remote side and waiting for response*/
+    std::shared_ptr<sdp_task> m_current_pending_request_initor;/* which sdp task initialized this request if we have */
     sdp_manager* m_sdp_manager = nullptr;
 };
 

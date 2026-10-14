@@ -186,7 +186,7 @@ public:
     }
 
     uint16_t m_attribute_list_byte_count = 0;
-    std::vector<sdp_data_element> m_attribute_list;
+    std::vector<sdp_data_element> m_service_record_list;
     std::vector<uint8_t> m_attribute_list_raw_buffer;
     std::vector<uint8_t> m_continue_info;
 };
@@ -219,21 +219,8 @@ public:
     }
 
     uint16_t m_attribute_list_byte_count = 0;
-    std::vector<sdp_data_element> m_attribute_list;
-    std::vector<uint8_t> m_continue_info;
-};
-
-class sdp_service_search_attribute_rsp : public sdp_protocol_base
-{
-
-public:
-
-    sdp_service_search_attribute_rsp()
-    {
-        m_pdu_id = sdp_pdu_id::sdp_service_search_attr_rsp;
-    }
-
-    std::vector<uint8_t> m_attribute_list;
+    std::vector<sdp_data_element> m_service_record_list;
+    std::vector<uint8_t> m_service_record_list_raw_buffer;
     std::vector<uint8_t> m_continue_info;
 };
 

@@ -360,6 +360,7 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
     case bluetooth::sdp_pdu_id::sdp_service_search_attr_rsp:
         {
             auto response = parse_service_search_attribute_response( _sdp_header, _parameter_buffer, _parameter_size );
+            sdp_con->handle_service_search_attribute_response( _sdp_header, response );
         }
         break;
     default:
@@ -413,6 +414,10 @@ void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& 
     if( detail_tsk->m_service_uuid.empty() )
     {
         LogUtilError() << "sdp_service_search_attribute_req requires at least one service uuid";
+        if( detail_tsk->m_searching_result_callback )
+        {
+            detail_tsk->m_searching_result_callback( {}, sdp_search_result::sdp_search_failed );
+        }
         return;
     }
 
@@ -420,13 +425,6 @@ void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& 
     {
         detail_tsk->m_requested_id_ranges.push_back( { 0x0000,0xFFFF } );
     }
-    std::shared_ptr<sdp_service_search_attribute_req> request;
-    request = std::make_shared<sdp_service_search_attribute_req>();
-    request->m_matching_uuids = detail_tsk->m_service_uuid;
-    request->m_requested_id_ranges = detail_tsk->m_requested_id_ranges;
-    request->m_max_return_count = 0xFFFF;
-    request->m_matching_ids = detail_tsk->m_attribute_id_list;
-    request->m_remote_device = detail_tsk->m_remote_device;
 
     auto conn_ = find_connection( detail_tsk->m_remote_device );
     if( !conn_ )
@@ -472,21 +470,21 @@ void sdp_manager::send_packet
     {
     case sdp_pdu_id::sdp_service_search_attr_rsp:
     {
-        std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
-        rsp = std::static_pointer_cast<sdp_service_search_attribute_rsp>( a_packet );
+        std::shared_ptr<sdp_service_search_attribute_response> rsp;
+        rsp = std::static_pointer_cast<sdp_service_search_attribute_response>( a_packet );
         local_cid = rsp->m_local_cid;
         hci_packet = std::make_shared<hci_data>();
 
-        sdp_sdu_size = 2 + rsp->m_attribute_list.size() + 1 + rsp->m_continue_info.size();
+        sdp_sdu_size = 2 + rsp->m_service_record_list_raw_buffer.size() + 1 + rsp->m_continue_info.size();
         size_t hci_total_size = _sdp_header.header_size() + sdp_sdu_size;
         hci_packet->m_buffer.resize( hci_total_size );
 
         // fill the sdp sdu field.
         p_sdp_sdu = hci_packet->m_buffer.data() + _sdp_header.header_size();
-        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_attribute_list.size() ) );
+        write_be16( p_sdp_sdu, static_cast<uint16_t>( rsp->m_service_record_list_raw_buffer.size() ) );
         offset += 2;
-        memcpy( p_sdp_sdu + offset, rsp->m_attribute_list.data(), rsp->m_attribute_list.size() );
-        offset += rsp->m_attribute_list.size();
+        memcpy( p_sdp_sdu + offset, rsp->m_service_record_list_raw_buffer.data(), rsp->m_service_record_list_raw_buffer.size() );
+        offset += rsp->m_service_record_list_raw_buffer.size();
         p_sdp_sdu[offset] = static_cast<uint8_t>( rsp->m_continue_info.size() );
         offset += 1;
         memcpy( p_sdp_sdu + offset, rsp->m_continue_info.data(), rsp->m_continue_info.size() );
@@ -1168,7 +1166,6 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
     uint32_t attribute_list_size = 0;
     if( size_left < 2 )
     {
-        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return response;
     }
     attribute_list_size = be_to_host16( p_buffer );
@@ -1178,15 +1175,15 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
 
     if( size_left < attribute_list_size )
     {
-        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return response;
     }
-    std::vector<sdp_data_element> attribute_list;
+    sdp_data_element attribute_list_value;
     uint32_t max_elements_size_to_parse = 50;
-    status = sdp_data_element::parse_elements_from( p_buffer, size_left, max_elements_size_to_parse, attribute_list );
+    uint32_t pared_size_for_list = 0;
+    status = sdp_data_element::parse_from( p_buffer, attribute_list_size,
+        pared_size_for_list, attribute_list_value );
     if( !status )
     {
-        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return response;
     }
     parsed_size = attribute_list_size;
@@ -1197,13 +1194,11 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
     uint16_t continue_state_size = 0;
     if( size_left < 1 )
     {
-        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_syntax );
         return response;
     }
     continue_state_size = p_buffer[0];
     if( continue_state_size > 16 )
     {
-        send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
         return response;
     }
     parsed_size = 1;
@@ -1213,7 +1208,6 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
     {
         if( size_left < continue_state_size )
         {
-            send_error_rsp( a_sdp_header.get_acl_handle(), sdp_error_code::invalid_continue_status );
             return response;
         }
         continue_state.resize( continue_state_size );
@@ -1221,7 +1215,10 @@ std::shared_ptr<sdp_service_attribute_response> sdp_manager::parse_service_attri
     }
 
     response = std::make_shared<sdp_service_attribute_response>();
-    response->m_attribute_list = attribute_list;
+    if( attribute_list_value.can_as_elements() )
+    {
+        response->m_service_record_list = attribute_list_value.get_elements();
+    }
     response->m_continue_info = continue_state;
     response->m_attribute_list_byte_count = attribute_list_size;
     response->m_transaction_id = transaction_id;
@@ -1386,7 +1383,7 @@ std::shared_ptr<sdp_service_search_attribute_response> sdp_manager::parse_servic
 
     std::shared_ptr<sdp_service_search_attribute_response> response;
     response = std::make_shared<sdp_service_search_attribute_response>();
-    response->m_attribute_list = alternative_result->m_attribute_list;
+    response->m_service_record_list = alternative_result->m_service_record_list;
     response->m_continue_info = alternative_result->m_continue_info;
     response->m_attribute_list_byte_count = alternative_result->m_attribute_list_byte_count;
     response->m_transaction_id = alternative_result->m_transaction_id;

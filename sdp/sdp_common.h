@@ -158,5 +158,11 @@ enum class sdp_attribute_value_type : uint8_t
     url = 0x08,
 };
 
+enum class sdp_search_result : uint8_t
+{
+    sdp_search_success,
+    sdp_search_failed,
+};
+
 }
 

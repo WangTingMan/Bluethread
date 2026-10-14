@@ -159,6 +159,7 @@ void sdp_connection::search_service_attribute( std::shared_ptr<sdp_task_service_
     request->m_matching_ids = a_service_search->m_attribute_id_list;
     request->m_requested_id_ranges = a_service_search->m_requested_id_ranges;
     m_current_pending_request = request;
+    m_current_pending_request_initor = a_service_search;
     m_sdp_manager->send_packet( request, m_address );
 }
 
@@ -348,8 +349,8 @@ void sdp_connection::handle_service_search_attribute_request
             auto c_buf = exract_continue_buffer( pointer );
             if( c_buf )
             {
-                std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
-                rsp = std::make_shared<sdp_service_search_attribute_rsp>();
+                std::shared_ptr<sdp_service_search_attribute_response> rsp;
+                rsp = std::make_shared<sdp_service_search_attribute_response>();
                 rsp->m_local_cid = a_request->m_local_cid;
                 rsp->m_transaction_id = a_request->m_transaction_id;
                 rsp->m_remote_device = a_request->m_remote_device;
@@ -366,7 +367,7 @@ void sdp_connection::handle_service_search_attribute_request
                     m_conitues_buffers.push_back( ccb );
                     rsp->m_continue_info = make_continuation( p_continue );
                 }
-                rsp->m_attribute_list = std::move( c_buf->buffer );
+                rsp->m_service_record_list_raw_buffer = std::move( c_buf->buffer );
                 m_sdp_manager->send_packet( rsp, m_address );
                 m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
             }
@@ -445,8 +446,8 @@ void sdp_connection::handle_service_search_attribute_request
     sdp_data_element element;
     element.set_elements( attribute_list_result );
     auto raw = element.get_raw_buffer();
-    std::shared_ptr<sdp_service_search_attribute_rsp> rsp;
-    rsp = std::make_shared<sdp_service_search_attribute_rsp>();
+    std::shared_ptr<sdp_service_search_attribute_response> rsp;
+    rsp = std::make_shared<sdp_service_search_attribute_response>();
     rsp->m_local_cid = a_request->m_local_cid;
     rsp->m_transaction_id = a_request->m_transaction_id;
     rsp->m_remote_device = a_request->m_remote_device;
@@ -463,10 +464,43 @@ void sdp_connection::handle_service_search_attribute_request
         m_conitues_buffers.push_back( ccb );
         rsp->m_continue_info = make_continuation(p_continue);
     }
-    rsp->m_attribute_list = std::move( raw );
+    rsp->m_service_record_list_raw_buffer = std::move( raw );
 
     m_sdp_manager->send_packet( rsp, m_address );
     m_incoming_pending_req = sdp_pdu_id::sdp_invalid_pdu;
+}
+
+void sdp_connection::handle_service_search_attribute_response
+    (
+    sdp_header& _sdp_header,
+    std::shared_ptr<sdp_service_search_attribute_response> const& a_response
+    )
+{
+    if( m_current_pending_request->m_pdu_id == sdp_pdu_id::sdp_service_search_attr_req &&
+        m_current_pending_request->m_transaction_id == _sdp_header.get_transaction_id() &&
+        a_response )
+    {
+        bool completed_result = false;
+        completed_result = a_response->m_continue_info.empty();
+        if( m_current_pending_request_initor &&
+            m_current_pending_request_initor->m_type == sdp_task_type::service_search_attribute &&
+            completed_result )
+        {
+            auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>
+                ( m_current_pending_request_initor );
+            detail_tsk->m_searching_result_callback( a_response->m_service_record_list,
+                sdp_search_result::sdp_search_success );
+            m_current_pending_request_initor.reset();
+        }
+
+        if( !completed_result )
+        {
+            // we need merge partial completed result...
+            LogUtilError( "we need merge partial completed result..." );
+        }
+    }
+    m_current_pending_request.reset();
+    process_next_pending_request();
 }
 
 void sdp_connection::handle_service_attribute_request

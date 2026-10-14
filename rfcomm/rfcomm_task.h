@@ -20,6 +20,8 @@
 
 #include "bluetooth_address.h"
 #include "uuid.h"
+#include "sdp/sdp_common.h"
+#include "sdp/sdp_data_element.h"
 
 namespace bluetooth
 {
@@ -43,6 +45,9 @@ enum class rfcomm_task_type : uint8_t
     connect_specific_uuid = 0x05,   /**
                                     * try to connect to remote port specificed by uuids which in member uuids
                                     */
+    rfcomm_sdp_service_attribute_search_result = 0x06,  /**
+                                                        * the SDP service searching result for RFCOMM.
+                                                        */
 };
 
 class rfcomm_task : public framework::abstract_task
@@ -131,6 +136,22 @@ public:
 
     bluetooth_address address;
     std::vector<uuid> uuids;
+};
+
+class rfcomm_task_srv_att_searching_result : public rfcomm_task
+{
+
+public:
+
+    rfcomm_task_srv_att_searching_result()
+    {
+        m_type = rfcomm_task_type::rfcomm_sdp_service_attribute_search_result;
+    }
+
+    sdp_search_result result = sdp_search_result::sdp_search_failed;
+    bluetooth_address address;
+    std::vector<uuid> uuids;
+    std::vector<sdp_data_element> service_record_list;
 };
 
 }

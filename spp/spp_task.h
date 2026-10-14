@@ -22,6 +22,8 @@
 
 #include "bluetooth_address.h"
 #include "uuid.h"
+#include "sdp/sdp_common.h"
+#include "sdp/sdp_data_element.h"
 
 namespace bluetooth
 {
@@ -50,6 +52,9 @@ enum class spp_task_type : uint8_t
                                 * Send spp port data to remote device. m_address, m_port, m_port_on_local and
                                 * m_spp_data are valid
                                 */
+    spp_sdp_service_attribute_search_result = 0x06,  /**
+                                                        * the SDP service searching result for RFCOMM.
+                                                        */
 };
 
 class spp_task : public framework::abstract_task
@@ -128,6 +133,20 @@ public:
     bool m_port_on_local = false;
     std::shared_ptr<std::vector<uint8_t>> m_spp_data; // Only spp user data without any protocol header
 };
+
+class  spp_sdp_service_attribute_search_result_task : public spp_task
+{
+
+public:
+
+    spp_sdp_service_attribute_search_result_task();
+
+    sdp_search_result result = sdp_search_result::sdp_search_failed;
+    bluetooth_address address;
+    std::vector<uuid> uuids;
+    std::vector<sdp_data_element> service_record_list;
+};
+
 
 }
 

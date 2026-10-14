@@ -24,6 +24,7 @@
 #include "spp_connection.h"
 #include "data_element.h"
 #include "bluetooth_address.h"
+#include "spp/spp_task.h"
 
 #include <functional>
 #include <vector>
@@ -84,6 +85,11 @@ private:
         bluetooth_address a_address,
         uint8_t a_port,
         bool a_local_inited
+        );
+
+    void handle_spp_sdp_service_attribute_search_result
+        (
+        std::shared_ptr<spp_sdp_service_attribute_search_result_task> a_detail_task
         );
 
     void disconnect

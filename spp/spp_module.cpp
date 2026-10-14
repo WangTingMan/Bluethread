@@ -107,6 +107,12 @@ void spp_module::handle_task( std::shared_ptr<abstract_task> a_task )
                 detail_task->m_port_on_local, std::move( detail_task->m_spp_data ) );
         }
         break;
+    case spp_task_type::spp_sdp_service_attribute_search_result:
+        {
+            auto detail_task = static_pointer_cast<spp_sdp_service_attribute_search_result_task>( _spp_task );
+            handle_spp_sdp_service_attribute_search_result( detail_task );
+        }
+        break;
     default:
         LogUtilError() << "sdp task type ignored: " << static_cast<uint32_t>( _spp_task->m_type );
     }
@@ -389,6 +395,63 @@ void spp_module::handle_sdu
     framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
+void spp_module::handle_spp_sdp_service_attribute_search_result
+    (
+    std::shared_ptr<spp_sdp_service_attribute_search_result_task> a_detail_task
+    )
+{
+    bluetooth_address a_address = a_detail_task->address;
+    std::vector<uuid> a_uuid = a_detail_task->uuids;
+    std::vector<sdp_data_element> a_service_records = a_detail_task->service_record_list;
+    LogUtilDebug() << "RFCOMM sdp searching result from " << a_address.to_string();
+
+    if( a_service_records.empty() )
+    {
+        /**
+         * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
+         */
+        return;
+    }
+
+    std::vector<sdp_data_element> attributes;
+    bool matched = false;
+    for( auto& service_record : a_service_records )
+    {
+        matched = false;
+        if( !service_record.can_as_elements() )
+        {
+            LogUtilDebug() << "service record is not a data element list. ignore this one";
+            continue;
+        }
+
+        matched = service_record.matching_uuids( a_uuid );
+        if( !matched )
+        {
+            continue;
+        }
+
+        attributes = service_record.get_elements();
+        uint16_t attribute_id = 0;
+        for( int i = 0; i < attributes.size(); i += 2 )
+        {
+            if( attributes[i].can_as_uint16() )
+            {
+                attribute_id = attributes[i].get_uint16_value();
+            }
+            else
+            {
+                continue;
+            }
+
+            sdp_data_element& attribute_value = attributes[i + 1];
+            if( attribute_id == sdp_universal_attribute_id::protocol_descriptor_list )
+            {
+
+            }
+        }
+    }
+}
+
 void spp_module::disconnect
     (
     bluetooth_address a_address,
@@ -479,11 +542,23 @@ void spp_module::connect
 
     spp_conn->set_connection_status( connection_status::connecting );
 
-    auto rfc_tsk = std::make_shared<rfcomm_task_connect_specific_uuid>();
-    rfc_tsk->address = a_address;
-    rfc_tsk->uuids = uuids;
-    rfc_tsk->set_source_module( get_name() );
-    framework_manager::get_instance().get_thread_manager().post_task( rfc_tsk, framework::source_here );
+    std::shared_ptr<sdp_task_service_search_attribute> tsk;
+    tsk = std::make_shared<sdp_task_service_search_attribute>();
+    tsk->m_remote_device = a_address;
+    tsk->m_service_uuid = uuids;
+    tsk->set_source_module( get_name() );
+    tsk->m_searching_result_callback = [uuids, a_address]
+        ( std::vector<sdp_data_element> a_service_records, sdp_search_result a_result )
+        {
+            auto tsk = std::make_shared<spp_sdp_service_attribute_search_result_task>();
+            tsk->address = a_address;
+            tsk->service_record_list = std::move( a_service_records );
+            tsk->uuids = uuids;
+            tsk->result = a_result;
+            framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+        };
+
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
     LogUtilInfo() << "Connect to defaule spp port with remote device " << a_address.to_string();
 }
 

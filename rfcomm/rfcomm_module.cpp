@@ -145,18 +145,6 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
             }
         }
         break;
-    case rfcomm_task_type::connect_specific_uuid:
-        {
-            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_connect_specific_uuid>( detail_tsk );
-            connect( rfc_detail_tsk->address, rfc_detail_tsk->uuids );
-        }
-        break;
-    case rfcomm_task_type::rfcomm_sdp_service_attribute_search_result:
-        {
-            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_srv_att_searching_result>( detail_tsk );
-            handle_service_attribute_search_result( rfc_detail_tsk->address, rfc_detail_tsk->uuids, rfc_detail_tsk->service_record_list );
-        }
-        break;
     default:
         LogUtilError() << "Task type ignored: " << static_cast< uint16_t >( detail_tsk->m_type );
         break;
@@ -390,83 +378,6 @@ std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_acl_handle
     }
 
     return nullptr;
-}
-
-void rfcomm_module::connect( bluetooth_address a_address, std::vector<uuid> a_uuid )
-{
-    std::shared_ptr<sdp_task_service_search_attribute> tsk;
-    tsk = std::make_shared<sdp_task_service_search_attribute>();
-    tsk->m_remote_device = a_address;
-    tsk->m_service_uuid = a_uuid;
-    tsk->set_source_module( get_name() );
-    tsk->m_searching_result_callback = [a_uuid, a_address]
-        ( std::vector<sdp_data_element> a_service_records, sdp_search_result a_result )
-        {
-            auto tsk = std::make_shared<rfcomm_task_srv_att_searching_result>();
-            tsk->address = a_address;
-            tsk->service_record_list = std::move( a_service_records );
-            tsk->uuids = a_uuid;
-            tsk->result = a_result;
-            framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-        };
-
-    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-}
-
-void rfcomm_module::handle_service_attribute_search_result
-    (
-    bluetooth_address a_address,
-    std::vector<uuid> a_uuid,
-    std::vector<sdp_data_element> a_service_records
-    )
-{
-    LogUtilDebug() << "RFCOMM sdp searching result from " << a_address.to_string();
-
-    if( a_service_records.empty() )
-    {
-        /**
-         * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
-         */
-        return;
-    }
-
-    std::vector<sdp_data_element> attributes;
-    bool matched = false;
-    for( auto& service_record : a_service_records )
-    {
-        matched = false;
-        if( !service_record.can_as_elements() )
-        {
-            LogUtilDebug() << "service record is not a data element list. ignore this one";
-            continue;
-        }
-
-        matched = service_record.matching_uuids( a_uuid );
-        if( !matched )
-        {
-            continue;
-        }
-
-        attributes = service_record.get_elements();
-        uint16_t attribute_id = 0;
-        for( int i = 0; i < attributes.size(); i += 2)
-        {
-            if( attributes[i].can_as_uint16() )
-            {
-                attribute_id = attributes[i].get_uint16_value();
-            }
-            else
-            {
-                continue;
-            }
-
-            sdp_data_element& attribute_value = attributes[i + 1];
-            if( attribute_id == sdp_universal_attribute_id::protocol_descriptor_list )
-            {
-                
-            }
-        }
-    }
 }
 
 std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_remote( bluetooth_address const& a_address )

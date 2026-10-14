@@ -53,5 +53,10 @@ spp_async_send_spp_data_task::spp_async_send_spp_data_task()
     m_type = spp_task_type::spp_async_send_spp_data;
 }
 
+spp_sdp_service_attribute_search_result_task::spp_sdp_service_attribute_search_result_task()
+{
+    m_type = spp_task_type::spp_sdp_service_attribute_search_result;
+}
+
 }
 

@@ -127,6 +127,7 @@ namespace sdp_service_uuid
     constexpr uint16_t mcap_control_channel = 0x001E;
     constexpr uint16_t mcap_data_channel = 0x001F;
     constexpr uint16_t l2cap = 0x0100;
+    constexpr uint16_t spp = 0x1101;
 
     constexpr uint16_t service_discovey_server_service_class_id = 0x1000;
     constexpr uint16_t browse_group_descriptor_service_class_id = 0x1001;

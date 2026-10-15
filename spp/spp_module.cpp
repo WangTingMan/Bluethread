@@ -29,6 +29,7 @@
 #include "sdp/sdp_module.h"
 #include "sdp/sdp_task.h"
 #include "spp/spp_task.h"
+#include "spp/spp_sdp_utils.h"
 
 static constexpr uint8_t s_spp_port_start = 10;
 
@@ -400,12 +401,12 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     std::shared_ptr<spp_sdp_service_attribute_search_result_task> a_detail_task
     )
 {
-    bluetooth_address a_address = a_detail_task->address;
-    std::vector<uuid> a_uuid = a_detail_task->uuids;
-    std::vector<sdp_data_element> a_service_records = a_detail_task->service_record_list;
-    LogUtilDebug() << "RFCOMM sdp searching result from " << a_address.to_string();
+    bluetooth_address remote_address = a_detail_task->address;
+    std::vector<uuid> uuids = a_detail_task->uuids;
+    std::vector<sdp_data_element>const& service_records = a_detail_task->service_record_list;
+    LogUtilDebug() << "RFCOMM sdp searching result from " << remote_address.to_string();
 
-    if( a_service_records.empty() )
+    if( service_records.empty() )
     {
         /**
          * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
@@ -415,41 +416,23 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
 
     std::vector<sdp_data_element> attributes;
     bool matched = false;
-    for( auto& service_record : a_service_records )
+    matched = service_records[0].matching_uuids( uuids );
+    if( !matched )
     {
-        matched = false;
-        if( !service_record.can_as_elements() )
-        {
-            LogUtilDebug() << "service record is not a data element list. ignore this one";
-            continue;
-        }
-
-        matched = service_record.matching_uuids( a_uuid );
-        if( !matched )
-        {
-            continue;
-        }
-
-        attributes = service_record.get_elements();
-        uint16_t attribute_id = 0;
-        for( int i = 0; i < attributes.size(); i += 2 )
-        {
-            if( attributes[i].can_as_uint16() )
-            {
-                attribute_id = attributes[i].get_uint16_value();
-            }
-            else
-            {
-                continue;
-            }
-
-            sdp_data_element& attribute_value = attributes[i + 1];
-            if( attribute_id == sdp_universal_attribute_id::protocol_descriptor_list )
-            {
-
-            }
-        }
+        /**
+         * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
+         */
+        return;
     }
+
+    spp_sdp_service_attribute spp_attris;
+    spp_attris = parse_spp_sdp_attrubutes( service_records );
+    if( !spp_attris.is_valid )
+    {
+        return;
+    }
+
+    LogUtilDebug() << "remote rfcomm port number is " << uint32_t( spp_attris.port );
 }
 
 void spp_module::disconnect

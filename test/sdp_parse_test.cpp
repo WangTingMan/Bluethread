@@ -1,4 +1,5 @@
 #include "sdp/sdp_data_element.h"
+#include "spp/spp_sdp_utils.h"
 
 #include <cassert>
 #include <vector>
@@ -48,6 +49,8 @@ void sample_spp_service_record_list_test()
 
     std::vector<sdp_data_element> service_record_list = attribute_list_value.get_elements();
     assert( service_record_list.size() == 1 );
+
+    auto spp_attris = parse_spp_sdp_attrubutes( service_record_list );
 
     std::vector<sdp_data_element> service_record_attributes_list;
     uint16_t attribute_id = 0;

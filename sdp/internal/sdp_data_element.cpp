@@ -829,7 +829,7 @@ std::u8string sdp_data_element::get_string_value()const
     switch( m_size_index )
     {
     case 5:
-        str.assign( reinterpret_cast<const char8_t*>( m_buffer.data() ) + 1 );
+        str.assign( reinterpret_cast<const char8_t*>( m_buffer.data() ) + 2 );
         break;
     case 6:
         str.assign( reinterpret_cast< const char8_t* >( m_buffer.data() ) + 3 );

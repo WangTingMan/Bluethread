@@ -40,7 +40,7 @@ struct spp_sdp_service_attribute
     bool is_valid = false;             ///< Overall validity flag. If true, this struct is usable and port holds valid value
     bool has_name = false;             ///< True if service_name was present and parsed from SDP record
     std::u8string service_name;        ///< Human-readable service name; valid only when has_name == true. Primary-language name is selected when multi-language entries exist
-    uint8_t port;                      ///< RFCOMM DLCI port number; valid only when is_valid == true
+    uint8_t port = 0u;                 ///< RFCOMM DLCI port number; valid only when is_valid == true
     bool has_spp_version = false;      ///< True if SPP version information was present and parsed from SDP record
     std::string version_string;        ///< String-formatted SPP version text; valid only when has_spp_version == true
     uint16_t version_number;           ///< Numeric SPP version identifier; valid only when has_spp_version == true

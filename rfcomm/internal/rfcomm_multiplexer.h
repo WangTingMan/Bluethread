@@ -19,13 +19,14 @@
 #include <iostream>
 #include <vector>
 
-#include "data_element.h" 
+#include "data_element.h"
 #include "../rfcomm_protocol.h"
 #include "rfcomm_port_connection.h"
 #include "bluetooth_address.h"
 
 #include "../common/state_machine.h"
 #include "../l2cap/l2cap_common.h"
+#include "rfcomm/rfcomm_task.h"
 
 namespace bluetooth
 {
@@ -72,6 +73,7 @@ public:
     uint16_t m_local_cid;
     uint16_t m_remote_cid;
     l2cap_channel_state_type m_state;
+    std::shared_ptr<rfcomm_task_connect_port> m_connect_task;
 };
 
 class rfcomm_state_base : public state_machine::abstract_state
@@ -109,6 +111,8 @@ protected:
     void handle_connection_request( std::shared_ptr<connection_request> const& a_request );
 
     void handle_controlling( std::shared_ptr<rfcomm_multipexer_event>const& a_rfc_event );
+
+    void connect( std::shared_ptr<rfcomm_task_connect_port> a_connect_task );
 
     void on_enter()override;
 
@@ -309,6 +313,8 @@ public:
         bool a_accept = true
         );
 
+    void connect( std::shared_ptr<rfcomm_task_connect_port> a_task );
+
     void disconnect( uint8_t a_port, bool a_port_on_local );
 
     void send_port_user_data
@@ -403,6 +409,8 @@ private:
      */
     void check_working_port();
 
+    void cached_pending_outgoing_connect_request( std::shared_ptr<rfcomm_task_connect_port> a_request );
+
     uint16_t m_local_cid = 0x00;
     uint16_t m_acl_handle = 0x00;
     uint16_t m_remote_mtu = 0x00; // remote device's mtu on this rfcomm channel.
@@ -410,6 +418,7 @@ private:
     bool m_wait_config_rsp_flag = false; // true if we wait for config rsp from remote device
     bool m_remote_configured = false;
     bool m_local_inited = false;
+    std::vector<std::shared_ptr<rfcomm_task_connect_port>> m_pending_outgoing_connect_request;
     std::vector<std::shared_ptr<rfcomm_port_connection>> m_worked_ports;
     std::vector<std::shared_ptr<rfcomm_port_connection>> m_idle_ports;
     std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool )> m_callback_finder;

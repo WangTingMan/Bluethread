@@ -103,7 +103,7 @@ void rfcomm_state_base::transition_to_state( rfcomm_multipexer_state_type a_type
 {
     rfcomm_multipexer_state_type this_state = static_cast< rfcomm_multipexer_state_type >( get_id() );
     transition_to( static_cast<uint32_t>( a_type ) );
-    LogUtilInfo() << "rfcomm state machine transition from state <" << this_state << "> to state <"
+    LogUtilInfo() << "rfcomm multiplexor state machine transition from state <" << this_state << "> to state <"
         << a_type << ">";
 }
 
@@ -131,8 +131,7 @@ bool rfcomm_multipexer_idle::handle_event( std::shared_ptr<state_machine::abstra
     switch( rfc_event->m_type )
     {
     case rfcomm_event_type::start_request:
-        get_multipexer().connect( rfc_event->m_address );
-        transition_to_state( rfcomm_multipexer_state_type::wait_conn_cnf );
+        connect( rfc_event->m_connect_task );
         break;
     case rfcomm_event_type::l2cap_signaling_message:
         switch( rfc_event->m_signaling_pkt->m_signaling_code )
@@ -194,6 +193,13 @@ void rfcomm_multipexer_idle::handle_controlling( std::shared_ptr<rfcomm_multipex
     default:
         LogUtilError() << "rfcomm controlling type ignored: " << header.get_frame_type();
     }
+}
+
+void rfcomm_multipexer_idle::connect( std::shared_ptr<rfcomm_task_connect_port> a_connect_task )
+{
+    get_multipexer().connect( a_connect_task->address );
+    get_multipexer().cached_pending_outgoing_connect_request( a_connect_task );
+    transition_to_state( rfcomm_multipexer_state_type::wait_conn_cnf );
 }
 
 void rfcomm_multipexer_idle::on_enter()
@@ -807,6 +813,16 @@ void rfcomm_multipexer::do_accept_coming_connection_request
     }
 }
 
+void rfcomm_multipexer::connect( std::shared_ptr<rfcomm_task_connect_port> a_task )
+{
+    std::shared_ptr<rfcomm_multipexer_event> event_;
+    event_ = std::make_shared<rfcomm_multipexer_event>();
+    event_->m_connect_task = std::move( a_task );
+    event_->m_type = rfcomm_event_type::start_request;
+
+    handle_event( event_ );
+}
+
 void rfcomm_multipexer::disconnect( uint8_t a_port, bool a_port_on_local )
 {
     std::shared_ptr<rfcomm_port_connection> port;
@@ -1328,6 +1344,23 @@ void rfcomm_multipexer::check_working_port()
             ++it;
         }
     }
+}
+
+void rfcomm_multipexer::cached_pending_outgoing_connect_request
+    (
+    std::shared_ptr<rfcomm_task_connect_port> a_request
+    )
+{
+    for( auto& ele : m_pending_outgoing_connect_request )
+    {
+        if( ele->port == a_request->port )
+        {
+            LogUtilError() << "duplicated connect request for port: " << uint32_t( ele->port );
+            return;
+        }
+    }
+
+    m_pending_outgoing_connect_request.push_back( a_request );
 }
 
 }

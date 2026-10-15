@@ -27,19 +27,11 @@ namespace bluetooth
 enum class rfcomm_task_type : uint8_t
 {
     invalid_type = 0x00,
-    accept_coming_connection_request = 0x01, /** accept coming connection request. parameter address indicate the
-                                                * remote device' address, and port indicate which port to accept
-                                                */
-    reject_coming_connection_request = 0x02, /** accept coming connection request. parameter address indicate the
-                                                * remote device' address, and port indicate which port to accept
-                                                */
-    disconnect_specified_port = 0x03, /** disconnect specified device's connected specified port
-                                        * address, port and port_on_local are valid
-                                        */
-    async_send_spp_data = 0x04, /**
-                                * Send spp port data to remote device. address, port, port_on_local and
-                                * spp_data are valid
-                                */
+    accept_coming_connection_request = 0x01, /* accept coming connection request. */
+    reject_coming_connection_request = 0x02, /* accept coming connection request.*/
+    disconnect_specified_port = 0x03, /* disconnect specified device's connected specified port*/
+    async_send_spp_data = 0x04, /* Send spp port data to remote device.*/
+    connect_specified_port = 0x05, /* Connect remote device's port*/
 };
 
 class rfcomm_task : public framework::abstract_task
@@ -114,6 +106,20 @@ public:
     uint8_t port = 0;
     bool port_on_local = false;
     std::shared_ptr<std::vector<uint8_t>> spp_data;
+};
+
+class rfcomm_task_connect_port : public rfcomm_task
+{
+
+public:
+
+    rfcomm_task_connect_port()
+    {
+        m_type = rfcomm_task_type::connect_specified_port;
+    }
+
+    bluetooth_address address;
+    uint8_t port = 0;
 };
 
 }

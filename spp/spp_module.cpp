@@ -406,11 +406,13 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     std::vector<sdp_data_element>const& service_records = a_detail_task->service_record_list;
     LogUtilDebug() << "RFCOMM sdp searching result from " << remote_address.to_string();
 
+    auto spp_conn = a_detail_task->spp_conn;
     if( service_records.empty() )
     {
         /**
          * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
          */
+        handle_spp_connection_failed( spp_conn );
         return;
     }
 
@@ -422,6 +424,7 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
         /**
          * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
          */
+        handle_spp_connection_failed( spp_conn );
         return;
     }
 
@@ -429,10 +432,56 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     spp_attris = parse_spp_sdp_attrubutes( service_records );
     if( !spp_attris.is_valid )
     {
+        handle_spp_connection_failed( spp_conn );
         return;
     }
 
+    std::shared_ptr<rfcomm_task_connect_port> task;
+    task = std::make_shared<rfcomm_task_connect_port>();
+    task->port = spp_attris.port;
+    task->address = a_detail_task->address;
+    bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+
     LogUtilDebug() << "remote rfcomm port number is " << uint32_t( spp_attris.port );
+}
+
+void spp_module::handle_spp_connection_failed( std::shared_ptr<spp_connection> a_sdp_conn )
+{
+    if( !a_sdp_conn )
+    {
+        return;
+    }
+
+    LogUtilDebug() << "spp connection failed: " << a_sdp_conn->get_remote_device().to_string();
+
+    for( auto it = m_connections.begin(); it != m_connections.end(); )
+    {
+        if( (*it).get() == a_sdp_conn.get() )
+        {
+            it = m_connections.erase( it );
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    std::function<void()> fun;
+    fun = [a_sdp_conn]()mutable
+        {
+            serial_port_connection_status status;
+            status.address = (void*)a_sdp_conn->get_remote_device().address;
+            status.port_number = a_sdp_conn->get_port();
+            status.port_on_local = !a_sdp_conn->local_inited();
+            status.status = connection_status::disconnected;
+            stack_manager::get_instance().get_stack_callback()( service_type::serial_port_profile,
+                function_type::serial_connection_status_changed, reinterpret_cast<void*>( &status ) );
+        };
+
+    std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
+    task->set_fun( fun, abstract_module::s_general_seq_task_runner_module );
+    task->set_source_module( s_spp_module_name );
+    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void spp_module::disconnect
@@ -530,7 +579,7 @@ void spp_module::connect
     tsk->m_remote_device = a_address;
     tsk->m_service_uuid = uuids;
     tsk->set_source_module( get_name() );
-    tsk->m_searching_result_callback = [uuids, a_address]
+    tsk->m_searching_result_callback = [uuids, a_address, spp_conn]
         ( std::vector<sdp_data_element> a_service_records, sdp_search_result a_result )
         {
             auto tsk = std::make_shared<spp_sdp_service_attribute_search_result_task>();
@@ -538,6 +587,7 @@ void spp_module::connect
             tsk->service_record_list = std::move( a_service_records );
             tsk->uuids = uuids;
             tsk->result = a_result;
+            tsk->spp_conn = spp_conn;
             framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
         };
 

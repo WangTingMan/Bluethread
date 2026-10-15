@@ -134,7 +134,7 @@ public:
     std::shared_ptr<std::vector<uint8_t>> m_spp_data; // Only spp user data without any protocol header
 };
 
-class  spp_sdp_service_attribute_search_result_task : public spp_task
+class spp_sdp_service_attribute_search_result_task : public spp_task
 {
 
 public:
@@ -145,6 +145,7 @@ public:
     bluetooth_address address;
     std::vector<uuid> uuids;
     std::vector<sdp_data_element> service_record_list;
+    std::shared_ptr<spp_connection> spp_conn;
 };
 
 

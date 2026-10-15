@@ -78,6 +78,8 @@ private:
 
     void handle_sdu( std::shared_ptr<hci_data> );
 
+    void connect_specific_port( std::shared_ptr<rfcomm_task_connect_port> a_task );
+
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
         (
         uint16_t a_acl_handle

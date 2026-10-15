@@ -145,6 +145,11 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
             }
         }
         break;
+    case rfcomm_task_type::connect_specified_port:
+        {
+            connect_specific_port( std::static_pointer_cast<rfcomm_task_connect_port>( detail_tsk ) );
+        }
+        break;
     default:
         LogUtilError() << "Task type ignored: " << static_cast< uint16_t >( detail_tsk->m_type );
         break;
@@ -308,6 +313,7 @@ void rfcomm_module::handle_connection_state_changed
             std::placeholders::_1, std::placeholders::_2 ) );
     }
 
+    mulx->set_local_cid( a_local_cid );
     mulx->handle_connection_state_changed( a_address, a_local_cid, a_remote_cid, a_state );
 
     if( l2cap_channel_state_type::close_state == a_state )
@@ -362,6 +368,38 @@ void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
     {
         LogUtilError() << "no such multipexer entity for channel id: " << local_cid;
     }
+}
+
+void rfcomm_module::connect_specific_port( std::shared_ptr<rfcomm_task_connect_port> a_task )
+{
+    std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_remote( a_task->address );
+    if( !mulx )
+    {
+        if( !m_idle_multipexer.empty() )
+        {
+            mulx = m_idle_multipexer.front();
+            m_idle_multipexer.erase( m_idle_multipexer.begin() );
+        }
+        else
+        {
+            mulx = std::make_shared<rfcomm_multipexer>();
+        }
+
+        m_working_multipexer.emplace_back( mulx );
+        mulx->set_remote_device( a_task->address );
+        mulx->start();
+    }
+
+    if( mulx )
+    {
+        mulx->connect( a_task );
+        return;
+    }
+    else
+    {
+        LogUtilDebug() << "cannot create rfcomm multiplexor";
+    }
+
 }
 
 std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_acl_handle

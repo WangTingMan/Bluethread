@@ -92,6 +92,8 @@ private:
         std::shared_ptr<spp_sdp_service_attribute_search_result_task> a_detail_task
         );
 
+    void handle_spp_connection_failed( std::shared_ptr<spp_connection> a_sdp_conn );
+
     void disconnect
         (
         bluetooth_address a_address,

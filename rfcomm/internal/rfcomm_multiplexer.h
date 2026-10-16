@@ -211,6 +211,8 @@ protected:
 
     void handle_controlling( std::shared_ptr<rfcomm_multipexer_event> const& a_rfc_event );
 
+    void handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event );
+
     void on_enter()override;
 
     void on_exit()override;
@@ -239,6 +241,8 @@ public:
 protected:
 
     void handle_controlling( std::shared_ptr<rfcomm_multipexer_event> const& a_rfc_event );
+
+    void handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event );
 
     void on_enter()override;
 
@@ -415,6 +419,9 @@ private:
     void check_working_port();
 
     void cached_pending_outgoing_connect_request( std::shared_ptr<rfcomm_task_connect_port> a_request );
+
+    /* To disconnect low layer L2CAP channel */
+    void disconnect_low_channel();
 
     uint16_t m_local_cid = 0x00;
     uint16_t m_acl_handle = 0x00;

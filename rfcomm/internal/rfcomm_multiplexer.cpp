@@ -105,11 +105,6 @@ void rfcomm_state_base::transition_to_state( rfcomm_multipexer_state_type a_type
     transition_to( static_cast<uint32_t>( a_type ) );
     LogUtilInfo() << "rfcomm multiplexor state machine transition from state <" << this_state << "> to state <"
         << a_type << ">";
-    if( a_type == rfcomm_multipexer_state_type::wait_sabm )
-    {
-        int x = 0;
-        x = 90;
-    }
 }
 
 rfcomm_multipexer_idle::rfcomm_multipexer_idle( rfcomm_multipexer& a_sm )
@@ -120,6 +115,7 @@ rfcomm_multipexer_idle::rfcomm_multipexer_idle( rfcomm_multipexer& a_sm )
 
 bool rfcomm_multipexer_idle::handle_event( uint32_t event, void* p_data )
 {
+    LogUtilError( "event ignored" );
     return true;
 }
 
@@ -127,11 +123,6 @@ bool rfcomm_multipexer_idle::handle_event( std::shared_ptr<state_machine::abstra
 {
     std::shared_ptr<rfcomm_multipexer_event> rfc_event;
     rfc_event = std::static_pointer_cast<rfcomm_multipexer_event>( a_event );
-    if( !rfc_event )
-    {
-        LogUtilError() << "Wrong event received";
-        return false;
-    }
 
     switch( rfc_event->m_type )
     {
@@ -142,7 +133,7 @@ bool rfcomm_multipexer_idle::handle_event( std::shared_ptr<state_machine::abstra
         switch( rfc_event->m_signaling_pkt->m_signaling_code )
         {
         case signaling_code::l2cap_connection_req:
-            handle_connection_request( std::static_pointer_cast< connection_request >( rfc_event->m_signaling_pkt ) );
+            handle_connection_request( std::static_pointer_cast<connection_request>( rfc_event->m_signaling_pkt ) );
             break;
         default:
             LogUtilError() << "signaling evnet ignored: " << rfc_event->m_signaling_pkt->m_signaling_code;
@@ -225,6 +216,7 @@ rfcomm_multipexer_wait_conn_cnf::rfcomm_multipexer_wait_conn_cnf( rfcomm_multipe
 
 bool rfcomm_multipexer_wait_conn_cnf::handle_event( uint32_t event, void* p_data )
 {
+    LogUtilError( "event ignored" );
     return true;
 }
 
@@ -232,11 +224,6 @@ bool rfcomm_multipexer_wait_conn_cnf::handle_event( std::shared_ptr<state_machin
 {
     std::shared_ptr<rfcomm_multipexer_event> rfc_event;
     rfc_event = std::static_pointer_cast< rfcomm_multipexer_event >( a_event );
-    if( !rfc_event )
-    {
-        LogUtilError() << "Wrong event received";
-        return false;
-    }
 
     switch( rfc_event->m_type )
     {
@@ -271,7 +258,25 @@ void rfcomm_multipexer_wait_conn_cnf::handle_connection_changed( std::shared_ptr
         }
         break;
     case l2cap_channel_state_type::open:
-
+        /**
+         * @note Normally, the rfcomm_multipexer_wait_conn_cnf state should NOT directly receive the L2CAP
+         * channel open state message.
+         * Currently in the rfcomm_multipexer_wait_conn_cnf state, a message indicating state transition of
+         * L2CAP channel open is received directly. Therefore, if this is a locally-initiated connection,
+         * send SABM; otherwise, wait for the peer to send SABM.
+         */
+        if( get_multipexer().m_local_inited )
+        {
+            // send sabm frame to remote device next step
+            LogUtilDebug() << "send SABM frame to remote device";
+            get_multipexer().send_sabm_frame();
+            transition_to_state( rfcomm_multipexer_state_type::sabm_wait_ua );
+        }
+        else
+        {
+            // It's remote device's responsibility to send SABM frame due to remote deivce create the l2cap connection
+            transition_to_state( rfcomm_multipexer_state_type::wait_sabm );
+        }
         break;
     default:
         break;
@@ -296,6 +301,7 @@ rfcomm_multipexer_configure::rfcomm_multipexer_configure( rfcomm_multipexer& a_s
 
 bool rfcomm_multipexer_configure::handle_event( uint32_t event, void* p_data )
 {
+    LogUtilError( "event ignored" );
     return true;
 }
 
@@ -336,10 +342,6 @@ bool rfcomm_multipexer_configure::handle_event( std::shared_ptr<state_machine::a
 
 void rfcomm_multipexer_configure::handle_configure_request( std::shared_ptr<l2cap_config_request> const& a_config_request )
 {
-    /**
-    * TODO check the configuration request can be accpeted or not.
-    */
-
     LogUtilInfo() << "received configure request from device: " << get_multipexer().m_remote_address.to_string()
         << ", local wait config rsp flag: " << std::boolalpha << get_multipexer().m_wait_config_rsp_flag;
 
@@ -396,12 +398,12 @@ void rfcomm_multipexer_configure::handle_configure_respose( std::shared_ptr<l2ca
 
 void rfcomm_multipexer_configure::handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
 {
-
     LogUtilInfo() << "Connection state changed. Device: " << a_event->m_address.to_string() << ", state: "
         << a_event->m_state;
 
-    if( l2cap_channel_state_type::open == a_event->m_state )
+    switch( a_event->m_state )
     {
+    case l2cap_channel_state_type::open:
         // we're not waiting for config rsp from remote device.
         if( get_multipexer().m_local_inited )
         {
@@ -414,6 +416,12 @@ void rfcomm_multipexer_configure::handle_connection_sate_changed( std::shared_pt
             // It's remote device's responsibility to send SABM frame due to remote deivce create the l2cap connection 
             transition_to_state( rfcomm_multipexer_state_type::wait_sabm );
         }
+        break;
+    case l2cap_channel_state_type::close_state:
+        transition_to_state( rfcomm_multipexer_state_type::idle );
+        break;
+    default:
+        LogUtilDebug() << "channel state event ignored.";
     }
 }
 
@@ -441,11 +449,6 @@ bool rfcomm_multipexer_sabm_wait_ua::handle_event( std::shared_ptr<state_machine
 {
     std::shared_ptr<rfcomm_multipexer_event> rfc_event;
     rfc_event = std::static_pointer_cast< rfcomm_multipexer_event >( a_event );
-    if( !rfc_event )
-    {
-        LogUtilError() << "Wrong event received";
-        return false;
-    }
 
     switch( rfc_event->m_type )
     {
@@ -472,7 +475,10 @@ bool rfcomm_multipexer_sabm_wait_ua::handle_event( std::shared_ptr<state_machine
 void rfcomm_multipexer_sabm_wait_ua::handle_multipexer_contolling( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
 {
     rfcomm_header& header = a_event->m_rfcomm_header;
-    switch( header.get_frame_type() )
+    auto frame_type = header.get_frame_type();
+    LogUtilInfo() << "sabm_wait_ua: received controlling frame: " << frame_type;
+
+    switch( frame_type )
     {
     case rfcomm_frame_type::ua:
         if( !get_multipexer().m_local_inited )
@@ -486,6 +492,7 @@ void rfcomm_multipexer_sabm_wait_ua::handle_multipexer_contolling( std::shared_p
         transition_to_state( rfcomm_multipexer_state_type::idle );
         break;
     default:
+        LogUtilError() << "RFC confrolling frame ignored";
         break;
     }
 }
@@ -508,6 +515,7 @@ rfcomm_multipexer_wait_sabm::rfcomm_multipexer_wait_sabm( rfcomm_multipexer& a_s
 
 bool rfcomm_multipexer_wait_sabm::handle_event( uint32_t event, void* p_data )
 {
+    LogUtilError( "event ignored" );
     return true;
 }
 
@@ -515,11 +523,6 @@ bool rfcomm_multipexer_wait_sabm::handle_event( std::shared_ptr<state_machine::a
 {
     std::shared_ptr<rfcomm_multipexer_event> rfc_event;
     rfc_event = std::static_pointer_cast< rfcomm_multipexer_event >( a_event );
-    if( !rfc_event )
-    {
-        LogUtilError() << "Wrong event received";
-        return false;
-    }
 
     switch( rfc_event->m_type )
     {
@@ -545,6 +548,7 @@ bool rfcomm_multipexer_wait_sabm::handle_event( std::shared_ptr<state_machine::a
     case rfcomm_event_type::l2cap_connetion_state_changed:
         LogUtilInfo() << "Remote address: " << rfc_event->m_address.to_string() << ", local cid: "
             << rfc_event->m_local_cid << ", remote cid: " << rfc_event->m_remote_cid << ", state: " << rfc_event->m_state;
+        handle_connection_sate_changed( rfc_event );
         break;
     default:
         LogUtilError() << "event type ignored: " << static_cast<uint32_t>( rfc_event->m_type );
@@ -576,11 +580,22 @@ void rfcomm_multipexer_wait_sabm::handle_controlling( std::shared_ptr<rfcomm_mul
     }
 }
 
+void rfcomm_multipexer_wait_sabm::handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
+{
+    switch( a_event->m_state )
+    {
+    case l2cap_channel_state_type::close_state:
+        transition_to_state( rfcomm_multipexer_state_type::idle );
+        break;
+    default:
+        LogUtilDebug() << "channel state event ignored.";
+    }
+}
+
 void rfcomm_multipexer_wait_sabm::handle_configure_respose( std::shared_ptr<l2cap_config_response> const& a_config_response )
 {
-
+    /* we should not receive such response within this state */
     LogUtilInfo() << "Received config rsp from deivce: " << get_multipexer().m_remote_address.to_string();
-
     get_multipexer().m_wait_config_rsp_flag = false;
 }
 
@@ -597,14 +612,14 @@ void rfcomm_multipexer_wait_sabm::on_enter()
         "rfcomm_multipexer_wait_sabm_timerout",
         rfcomm_module::s_rfcomm_module_name
         );
-    // TODO here the binded function not thread safe
 }
 
 void rfcomm_multipexer_wait_sabm::handle_timer_expire( uint32_t a_timer_id, std::string a_timer_name )
 {
     LogUtilError() << "Not SABM received and disconnect the l2cap channel due to we already wait for "
         << s_wait_sabm_timeout << " seconds.";
-    // TODO disconnect the L2CAP channel and transfer to idle state.
+    get_multipexer().disconnect_low_channel();
+    transition_to_state( rfcomm_multipexer_state_type::idle );
 }
 
 rfcomm_multipexer_wait_sabm::~rfcomm_multipexer_wait_sabm()
@@ -612,6 +627,7 @@ rfcomm_multipexer_wait_sabm::~rfcomm_multipexer_wait_sabm()
     auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
     auto timer_module_ = std::static_pointer_cast< timer_module >( mod );
     timer_module_->undregister_timer( m_wait_sabm_timeout_timer );
+    m_wait_sabm_timeout_timer = 0;
 }
 
 void rfcomm_multipexer_wait_sabm::on_exit()
@@ -619,6 +635,7 @@ void rfcomm_multipexer_wait_sabm::on_exit()
     auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
     auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
     timer_module_->undregister_timer( m_wait_sabm_timeout_timer );
+    m_wait_sabm_timeout_timer = 0;
 }
 
 rfcomm_multipexer_connected::rfcomm_multipexer_connected( rfcomm_multipexer& a_sm )
@@ -636,16 +653,14 @@ bool rfcomm_multipexer_connected::handle_event( std::shared_ptr<state_machine::a
 {
     std::shared_ptr<rfcomm_multipexer_event> rfc_event;
     rfc_event = std::static_pointer_cast< rfcomm_multipexer_event >( a_event );
-    if( !rfc_event )
-    {
-        LogUtilError() << "Wrong event received";
-        return false;
-    }
 
     switch( rfc_event->m_type )
     {
     case rfcomm_event_type::multipexer_controlling:
         handle_controlling( rfc_event );
+        break;
+    case rfcomm_event_type::l2cap_connetion_state_changed:
+        handle_connection_sate_changed( rfc_event );
         break;
     default:
         LogUtilError() << "event type ignored: " << static_cast< uint32_t >( rfc_event->m_type );
@@ -751,6 +766,18 @@ void rfcomm_multipexer_connected::handle_controlling( std::shared_ptr<rfcomm_mul
         break;
     }
 
+}
+
+void rfcomm_multipexer_connected::handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
+{
+    switch( a_event->m_state )
+    {
+    case l2cap_channel_state_type::close_state:
+        transition_to_state( rfcomm_multipexer_state_type::idle );
+        break;
+    default:
+        LogUtilDebug() << "channel state event ignored.";
+    }
 }
 
 void rfcomm_multipexer_connected::on_enter()
@@ -1199,7 +1226,7 @@ void rfcomm_multipexer::send_sabm_frame()
     header.set_frame_type( rfcomm_frame_type::sabm );
     header.set_channel_number( s_rfcomm_multipexer_channel );
     header.set_poll_final( true );
-    header.set_cr( true );
+    header.set_cr( m_local_inited );
     header.set_sdu_length( 0x00 );
 
     uint8_t buffer[100];
@@ -1379,6 +1406,17 @@ void rfcomm_multipexer::cached_pending_outgoing_connect_request
     }
 
     m_pending_outgoing_connect_request.push_back( a_request );
+}
+
+void rfcomm_multipexer::disconnect_low_channel()
+{
+    std::shared_ptr<l2cap_task_disconnect_channel_request> task;
+    task = std::make_shared<l2cap_task_disconnect_channel_request>();
+    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+    task->m_acl_handle = m_acl_handle;
+    task->m_remote_address = m_remote_address;
+    task->m_local_cid = m_local_cid;
+    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 }

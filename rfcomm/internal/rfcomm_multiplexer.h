@@ -50,7 +50,7 @@ enum class rfcomm_event_type : uint8_t
                                      // m_signaling_pkt is valid
     multipexer_controlling = 0x02, // rfcomm multipexer contolling signlaing( one of sabm, disc, dm, ua, and uih ).
                                    // m_rfcomm_header and m_hci_data is valid
-    l2cap_connetion_result = 0x03, // received rfcomm l2cap channel connection state changed event from l2cap layer
+    l2cap_connetion_state_changed = 0x03, // received rfcomm l2cap channel connection state changed event from l2cap layer
                                    // valid members: m_address, m_local_cid, m_remote_cid, m_state
 };
 
@@ -305,6 +305,11 @@ public:
     void set_remote_device( bluetooth_address const& a_address )
     {
         m_remote_address = a_address;
+    }
+
+    void set_local_init_connect( bool a_local_request_connection = true )
+    {
+        m_local_inited = a_local_request_connection;
     }
 
     void do_accept_coming_connection_request

@@ -32,7 +32,7 @@ static constexpr uint8_t s_rfcomm_multipexer_channel = 0x00;
 static constexpr uint8_t s_fcs_uih_cal_size = 2;
 static constexpr uint8_t s_fc_cal_size = 3;
 static constexpr uint8_t s_wait_sabm_timeout = 120; // wait sabm timeout is 120 seconds
-
+static constexpr uint16_t s_rfcomm_channel_mtu = 1691;
 namespace bluetooth
 {
  
@@ -45,8 +45,8 @@ std::ostream& operator<<( std::ostream& a_os, rfcomm_event_type a_state )
     case bluetooth::rfcomm_event_type::start_request:
         a_os << "start_request";
         break;
-    case rfcomm_event_type::l2cap_connetion_result:
-        a_os << "l2cap_connetion_result";
+    case rfcomm_event_type::l2cap_connetion_state_changed:
+        a_os << "l2cap_connetion_state_changed";
         break;
     case rfcomm_event_type::l2cap_signaling_message:
         a_os << "l2cap_signaling_message";
@@ -105,6 +105,11 @@ void rfcomm_state_base::transition_to_state( rfcomm_multipexer_state_type a_type
     transition_to( static_cast<uint32_t>( a_type ) );
     LogUtilInfo() << "rfcomm multiplexor state machine transition from state <" << this_state << "> to state <"
         << a_type << ">";
+    if( a_type == rfcomm_multipexer_state_type::wait_sabm )
+    {
+        int x = 0;
+        x = 90;
+    }
 }
 
 rfcomm_multipexer_idle::rfcomm_multipexer_idle( rfcomm_multipexer& a_sm )
@@ -146,7 +151,7 @@ bool rfcomm_multipexer_idle::handle_event( std::shared_ptr<state_machine::abstra
     case rfcomm_event_type::multipexer_controlling:
         handle_controlling( rfc_event );
         break;
-    case rfcomm_event_type::l2cap_connetion_result:
+    case rfcomm_event_type::l2cap_connetion_state_changed:
         LogUtilInfo() << "Remote address: " << rfc_event->m_address.to_string() << ", local cid: "
             << rfc_event->m_local_cid << ", remote cid: " << rfc_event->m_remote_cid << ", state: " << rfc_event->m_state;
         break;
@@ -235,7 +240,7 @@ bool rfcomm_multipexer_wait_conn_cnf::handle_event( std::shared_ptr<state_machin
 
     switch( rfc_event->m_type )
     {
-    case rfcomm_event_type::l2cap_connetion_result:
+    case rfcomm_event_type::l2cap_connetion_state_changed:
         handle_connection_changed( rfc_event );
         break;
     default:
@@ -248,11 +253,22 @@ bool rfcomm_multipexer_wait_conn_cnf::handle_event( std::shared_ptr<state_machin
 
 void rfcomm_multipexer_wait_conn_cnf::handle_connection_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
 {
+    LogUtilDebug() << "connection status changed to " << ( a_event->m_state );
+
     switch( a_event->m_state )
     {
     case l2cap_channel_state_type::close_state:
-        // TODO notigy upper layer connection failed.
         transition_to_state( rfcomm_multipexer_state_type::idle );
+        break;
+    case l2cap_channel_state_type::wait_config:
+        {
+            LogUtilDebug() << "config local l2cap channel and transfer to configure state.";
+            auto acl_db = framework_manager::get_instance().get_info_manager()
+                .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+            auto [acl, status] = acl_db->get_handle( a_event->m_address );
+            get_multipexer().config_local_channel( acl, a_event->m_remote_cid );
+            transition_to_state( rfcomm_multipexer_state_type::configure );
+        }
         break;
     case l2cap_channel_state_type::open:
 
@@ -308,7 +324,7 @@ bool rfcomm_multipexer_configure::handle_event( std::shared_ptr<state_machine::a
             LogUtilError() << "signaling evnet ignored: " << rfc_event->m_signaling_pkt->m_signaling_code;
         }
         break;
-    case rfcomm_event_type::l2cap_connetion_result:
+    case rfcomm_event_type::l2cap_connetion_state_changed:
         handle_connection_sate_changed( rfc_event );
         break;
     default:
@@ -341,6 +357,7 @@ void rfcomm_multipexer_configure::handle_configure_request( std::shared_ptr<l2ca
         if( get_multipexer().m_local_inited )
         {
             // send sabm frame to remote device next step
+            LogUtilDebug() << "send SABM frame to remote device";
             get_multipexer().send_sabm_frame();
             transition_to_state( rfcomm_multipexer_state_type::sabm_wait_ua );
         }
@@ -432,7 +449,7 @@ bool rfcomm_multipexer_sabm_wait_ua::handle_event( std::shared_ptr<state_machine
 
     switch( rfc_event->m_type )
     {
-    case rfcomm_event_type::l2cap_connetion_result:
+    case rfcomm_event_type::l2cap_connetion_state_changed:
         switch( rfc_event->m_state )
         {
         case l2cap_channel_state_type::close_state:
@@ -525,7 +542,7 @@ bool rfcomm_multipexer_wait_sabm::handle_event( std::shared_ptr<state_machine::a
     case rfcomm_event_type::multipexer_controlling:
         handle_controlling( rfc_event );
         break;
-    case rfcomm_event_type::l2cap_connetion_result:
+    case rfcomm_event_type::l2cap_connetion_state_changed:
         LogUtilInfo() << "Remote address: " << rfc_event->m_address.to_string() << ", local cid: "
             << rfc_event->m_local_cid << ", remote cid: " << rfc_event->m_remote_cid << ", state: " << rfc_event->m_state;
         break;
@@ -926,7 +943,7 @@ void rfcomm_multipexer::handle_connection_state_changed
     event_->m_local_cid = a_local_cid;
     event_->m_remote_cid = a_remote_cid;
     event_->m_state = a_state;
-    event_->m_type = rfcomm_event_type::l2cap_connetion_result;
+    event_->m_type = rfcomm_event_type::l2cap_connetion_state_changed;
 
     handle_event( event_ );
 }
@@ -1072,7 +1089,7 @@ void rfcomm_multipexer::config_local_channel( uint16_t a_acl_handle, uint16_t a_
     std::vector<channel_config_option> channel_cfg_options;
     channel_config_option cfg;
     cfg.m_type = channel_config_option_type::mtu;
-    cfg.m_option.m_mtu = 1024;
+    cfg.m_option.m_mtu = s_rfcomm_channel_mtu;
     channel_cfg_options.push_back( cfg );
 
     std::shared_ptr<l2cap_config_local_channel_request> cfg_request;
@@ -1182,6 +1199,7 @@ void rfcomm_multipexer::send_sabm_frame()
     header.set_frame_type( rfcomm_frame_type::sabm );
     header.set_channel_number( s_rfcomm_multipexer_channel );
     header.set_poll_final( true );
+    header.set_cr( true );
     header.set_sdu_length( 0x00 );
 
     uint8_t buffer[100];

@@ -386,6 +386,7 @@ void rfcomm_module::connect_specific_port( std::shared_ptr<rfcomm_task_connect_p
         }
 
         m_working_multipexer.emplace_back( mulx );
+        mulx->set_local_init_connect();
         mulx->set_remote_device( a_task->address );
         mulx->start();
     }

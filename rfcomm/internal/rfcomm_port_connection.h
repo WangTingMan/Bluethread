@@ -113,7 +113,7 @@ public:
 
 protected:
 
-    void handle_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn );
+    void handle_parameter_negotiation( std::shared_ptr<multipexer_pn_message> const& a_pn );
 
     void send_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn );
 
@@ -377,11 +377,17 @@ private:
      */
     void force_send_local_credit();
 
+    void send_dm_frame();
+
+    void send_ua_frame();
+
+    void send_disc_frame();
+
     /**
      * accept coming port connection request.
      * To send UA as response for SABM
      */
-    void accept_connection_request( bool a_accept );
+    void accept_port_connection_request( bool a_accept );
 
     std::function<void( std::shared_ptr<multipexer_message> )> m_multi_sender; /* Send UIH command on channel 0
                                                                                   Like PN, Test, FCon, FCoff, MSC, NSC for
@@ -393,12 +399,15 @@ private:
                                                                             * UIH frame.
                                                                             */
 
+    static constexpr uint16_t s_remote_max_default_frame_size = 127;
+
     bool m_local_inited = false;
     uint8_t m_dlci = 0x00;
     bluetooth_address m_remote_device;
     bool m_remote_credit_supported = false;
-    uint16_t m_remote_max_frame_size = 0x00;
+    uint16_t m_remote_max_frame_size = s_remote_max_default_frame_size;
     uint16_t m_remote_credit_value = 0x00;
+    uint8_t m_remote_priority = 0x00;
     uint16_t m_local_credit_value = 0x07;
     modem_status m_remote_modem_status;
     modem_status m_local_modem_status;

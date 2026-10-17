@@ -24,12 +24,12 @@ namespace bluetooth
 
 enum class rfcomm_frame_type : uint8_t
 {
-    sabm = 0x2F, // Set Asynchronous balanced mode
-    ua = 0x63,   // unnumbered acknowledgement
-    dm = 0x0F,   // disconnected mode
-    disc = 0x43, // disconnect
-    uih = 0xEF,  // unnmbered information with header check
-    ui = 0x03    // unnmbered information
+    sabm =  0x2F, // Set Asynchronous balanced mode
+    ua =    0x63, // unnumbered acknowledgement
+    dm =    0x0F, // disconnected mode
+    disc =  0x43, // disconnect
+    uih =   0xEF, // unnmbered information with header check
+    ui =    0x03  // unnmbered information
 };
 
 enum class multipexer_message_type : uint8_t
@@ -261,6 +261,11 @@ private:
 
     uint8_t m_dlci = 0x00;
     bool m_credit_supported = false;
+    /**
+     * @brief RFCOMM DLC priority
+     * Valid value range is 0 to 63.
+     * A smaller numeric value indicates higher priority.
+     */
     uint8_t m_priority = 0x00;
     uint16_t m_max_frame_size = 0x00;
     uint8_t m_credit_init_value = 0x00;

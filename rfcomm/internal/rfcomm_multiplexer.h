@@ -359,6 +359,8 @@ public:
         m_callback_finder = a_callback;
     }
 
+    void remove_port_connection( uint8_t a_port, bool a_local_inited );
+
 private:
 
     bool packet_valid
@@ -419,6 +421,16 @@ private:
     void check_working_port();
 
     void cached_pending_outgoing_connect_request( std::shared_ptr<rfcomm_task_connect_port> a_request );
+
+    /**
+     * @brief Start attempting the next pending port connect request.
+     *
+     * Invoked after the RFCOMM multiplexer state transitions to CONNECTED.
+     * Takes the next queued port connection request and proceeds with port negotiation and connection setup.
+     *
+     * @note Only called when multiplexer enters CONNECTED state.
+     */
+    void start_next_pending_port_connect();
 
     /* To disconnect low layer L2CAP channel */
     void disconnect_low_channel();

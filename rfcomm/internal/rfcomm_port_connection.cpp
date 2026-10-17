@@ -14,8 +14,9 @@
  * Commercial closed-source licenses are available upon request.
  */
 
+#include "internal_rfcomm_task.h"
 #include "rfcomm_port_connection.h"
-#include "../rfcomm_module.h"
+#include "rfcomm/rfcomm_module.h"
 
 #include "framework/log_util.h"
 #include "framework/framework_manager.h"
@@ -25,6 +26,7 @@ static constexpr bool s_local_support_credit = true;
 static constexpr uint8_t s_local_credit_init_value = 0x07;
 static constexpr uint16_t s_local_credit_report_threshold = 10;
 static constexpr uint8_t s_max_credit_local = 0x0FF;
+static constexpr uint16_t s_local_max_frame_size = 1018;
 
 namespace bluetooth
 {
@@ -111,7 +113,7 @@ bool rfcomm_port_idle_state::handle_event( std::shared_ptr<state_machine::abstra
         switch( event_->m_mulx_msg->get_type() )
         {
         case multipexer_message_type::pn:
-            handle_connection_request( std::static_pointer_cast< multipexer_pn_message >( event_->m_mulx_msg ) );
+            handle_parameter_negotiation( std::static_pointer_cast<multipexer_pn_message>( event_->m_mulx_msg ) );
             break;
         default:
             LogUtilError() << "event type not handle: " << event_->m_mulx_msg->get_type();
@@ -143,9 +145,10 @@ bool rfcomm_port_idle_state::handle_event( std::shared_ptr<state_machine::abstra
     return true;
 }
 
-void rfcomm_port_idle_state::handle_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn )
+void rfcomm_port_idle_state::handle_parameter_negotiation( std::shared_ptr<multipexer_pn_message> const& a_pn )
 {
     get_port().m_remote_credit_supported = a_pn->support_credit();
+    get_port().m_remote_priority = a_pn->priority();
     get_port().m_remote_max_frame_size = a_pn->max_frame_size();
     get_port().m_remote_credit_value = a_pn->credit_init_value();
 
@@ -154,15 +157,28 @@ void rfcomm_port_idle_state::handle_connection_request( std::shared_ptr<multipex
         << ", is local inited: " << get_port().m_local_inited << ", remote support credit: "
         << a_pn->support_credit() << ", remote credit value: " << static_cast<uint16_t>( a_pn->credit_init_value() );
 
+    bool need_disc = false;
     if( is_cmd && get_port().m_local_inited )
     {
         LogUtilError() << "schedule error. who inited, who send pn cmd";
-        return;
+        need_disc = true;
     }
 
     if( !is_cmd && !get_port().m_local_inited )
     {
         LogUtilError() << "schedule error. who inited, who should not send rsp";
+        need_disc = true;
+    }
+
+    if( need_disc )
+    {
+        get_port().send_dm_frame();
+        auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+        task->address = get_port().m_remote_device;
+        task->port = get_port().get_port();
+        task->local_inited = get_port().local_inited();
+        task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+        framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
         return;
     }
 
@@ -173,7 +189,7 @@ void rfcomm_port_idle_state::handle_connection_request( std::shared_ptr<multipex
     pn_rsp->set_dlci( a_pn->get_dlci() );
     pn_rsp->set_support_credit( s_local_support_credit );
     pn_rsp->set_priority( 0x00 );
-    pn_rsp->set_max_frame_size( 996 );
+    pn_rsp->set_max_frame_size( s_local_max_frame_size );
     pn_rsp->set_credit_init_value( get_port().m_local_credit_value );
 
     if( get_port().m_multi_sender )
@@ -186,7 +202,8 @@ void rfcomm_port_idle_state::handle_connection_request( std::shared_ptr<multipex
         return;
     }
 
-    transition_to_state( rfcomm_port_state_type::wait_sabm_state );
+    rfcomm_port_state_type next_state = rfcomm_port_state_type::wait_sabm_state;
+    transition_to_state( next_state );
 }
 
 void rfcomm_port_idle_state::send_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn )
@@ -270,7 +287,7 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
 
                 if( !callback )
                 {
-                    get_port().accept_connection_request( false );
+                    get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
                     LogUtilError() << "reject connection request. due to no callback. state port = "
                         << static_cast< uint32_t >( get_port().get_port() ) << std::boolalpha
@@ -281,7 +298,7 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 if( callback->port_number != get_port().get_port() ||
                     callback->local_inited != false )
                 {
-                    get_port().accept_connection_request( false );
+                    get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
                     LogUtilError() << "reject connection request. callback: port = " << static_cast< uint32_t >( callback->port_number )
                         << ", local inited = " << std::boolalpha << callback->local_inited
@@ -309,7 +326,7 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 }
                 else
                 {
-                    get_port().accept_connection_request( false );
+                    get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
                     LogUtilError() << "reject connection request. due to no callback. state port = "
                         << static_cast< uint32_t >( get_port().get_port() ) << std::boolalpha
@@ -323,11 +340,11 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
         }
         break; 
     case rfcomm_port_event_type::accept_connection_request:
-        get_port().accept_connection_request( true );
+        get_port().accept_port_connection_request( true );
         transition_to_state( rfcomm_port_state_type::modem_config_state );
         break;
     case rfcomm_port_event_type::reject_connection_request:
-        get_port().accept_connection_request( false );
+        get_port().accept_port_connection_request( false );
         transition_to_state( rfcomm_port_state_type::idle_state );
         break;
     default:
@@ -405,13 +422,7 @@ bool rfcomm_port_modem_config_state::handle_event( std::shared_ptr<state_machine
     case rfcomm_port_event_type::disconnect_port:
         {
             LogUtilInfo() << "Send DISC to remote device to discoonect current port";
-            rfcomm_header header_send;
-            header_send.set_dlci( get_port().get_dlci() );
-            header_send.set_cr( get_port().m_local_inited ? true : false );
-            header_send.set_frame_type( rfcomm_frame_type::disc );
-            header_send.set_poll_final( true );
-            header_send.set_sdu_length( 0x00 );
-            get_port().m_port_sender( header_send, nullptr, 0x00 );
+            get_port().send_disc_frame();
             transition_to( static_cast<uint32_t>( rfcomm_port_state_type::disc_wait_ua_state ) );
         }
         break;
@@ -631,13 +642,7 @@ bool rfcomm_port_open_state::handle_event( std::shared_ptr<state_machine::abstra
     case rfcomm_port_event_type::disconnect_port:
         {
             LogUtilInfo() << "Send DISC to remote device to discoonect current port";
-            rfcomm_header header_send;
-            header_send.set_dlci( get_port().get_dlci() );
-            header_send.set_cr( get_port().m_local_inited ? true : false );
-            header_send.set_frame_type( rfcomm_frame_type::disc );
-            header_send.set_poll_final( true );
-            header_send.set_sdu_length( 0x00 );
-            get_port().m_port_sender( header_send, nullptr, 0x00 );
+            get_port().send_disc_frame();
             transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
         }
         break;
@@ -879,17 +884,10 @@ void rfcomm_port_connection::force_send_local_credit()
     send_user_data( nullptr );
 }
 
-void rfcomm_port_connection::accept_connection_request( bool a_accept )
+void rfcomm_port_connection::send_dm_frame()
 {
     rfcomm_header header_send;
-    if( a_accept )
-    {
-        header_send.set_frame_type( rfcomm_frame_type::ua );
-    }
-    else
-    {
-        header_send.set_frame_type( rfcomm_frame_type::dm );
-    }
+    header_send.set_frame_type( rfcomm_frame_type::dm );
 
     header_send.set_dlci( get_dlci() );
     header_send.set_cr( true );
@@ -903,6 +901,49 @@ void rfcomm_port_connection::accept_connection_request( bool a_accept )
     else
     {
         LogUtilError() << "port sender is null. cannot send UA response";
+    }
+}
+
+void rfcomm_port_connection::send_ua_frame()
+{
+    rfcomm_header header_send;
+    header_send.set_frame_type( rfcomm_frame_type::ua );
+
+    header_send.set_dlci( get_dlci() );
+    header_send.set_cr( true );
+    header_send.set_poll_final( true ); // We need set the F bit to 1 here.
+    header_send.set_sdu_length( 0x00 ); // UA frame do not have information to send.
+
+    if( m_port_sender )
+    {
+        m_port_sender( header_send, nullptr, 0 );
+    }
+    else
+    {
+        LogUtilError() << "port sender is null. cannot send UA response";
+    }
+}
+
+void rfcomm_port_connection::send_disc_frame()
+{
+    rfcomm_header header_send;
+    header_send.set_dlci( get_dlci() );
+    header_send.set_cr( m_local_inited ? true : false );
+    header_send.set_frame_type( rfcomm_frame_type::disc );
+    header_send.set_poll_final( true );
+    header_send.set_sdu_length( 0x00 );
+    m_port_sender( header_send, nullptr, 0x00 );
+}
+
+void rfcomm_port_connection::accept_port_connection_request( bool a_accept )
+{
+    if( a_accept )
+    {
+        send_ua_frame();
+    }
+    else
+    {
+        send_dm_frame();
     }
 }
 

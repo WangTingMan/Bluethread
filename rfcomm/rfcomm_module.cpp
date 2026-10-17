@@ -23,6 +23,7 @@
 #include "../l2cap/l2cap_module.h"
 #include "../l2cap/l2cap_common.h"
 #include "sdp/sdp_task.h"
+#include "internal/internal_rfcomm_task.h"
 
 #include "../common/acl_connections_db.h"
 
@@ -148,6 +149,20 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
     case rfcomm_task_type::connect_specified_port:
         {
             connect_specific_port( std::static_pointer_cast<rfcomm_task_connect_port>( detail_tsk ) );
+        }
+        break;
+    case rfcomm_task_type::remove_specific_port:
+        {
+            auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_remove_specific_port>( detail_tsk );
+            mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
+            if( mulx )
+            {
+                mulx->remove_port_connection( rfc_detail_tsk->port, rfc_detail_tsk->local_inited );
+            }
+            else
+            {
+                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+            }
         }
         break;
     default:

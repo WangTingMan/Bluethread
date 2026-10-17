@@ -33,6 +33,8 @@ static constexpr uint8_t s_fcs_uih_cal_size = 2;
 static constexpr uint8_t s_fc_cal_size = 3;
 static constexpr uint8_t s_wait_sabm_timeout = 120; // wait sabm timeout is 120 seconds
 static constexpr uint16_t s_rfcomm_channel_mtu = 1691;
+static constexpr uint8_t s_max_idle_port_cached = 5;
+
 namespace bluetooth
 {
  
@@ -782,7 +784,7 @@ void rfcomm_multipexer_connected::handle_connection_sate_changed( std::shared_pt
 
 void rfcomm_multipexer_connected::on_enter()
 {
-
+    get_multipexer().start_next_pending_port_connect();
 }
 
 void rfcomm_multipexer_connected::on_exit()
@@ -975,6 +977,27 @@ void rfcomm_multipexer::handle_connection_state_changed
     handle_event( event_ );
 }
 
+void rfcomm_multipexer::remove_port_connection( uint8_t a_port, bool a_local_inited )
+{
+    std::shared_ptr<rfcomm_port_connection> port;
+    for( auto it = m_worked_ports.begin(); it != m_worked_ports.end(); )
+    {
+        port = *it;
+        if( port->get_port() == a_port &&
+            port->local_inited() == a_local_inited
+          )
+        {
+            m_worked_ports.erase( it );
+        }
+    }
+
+    m_idle_ports.push_back( port );
+    if( m_idle_ports.size() > 5 )
+    {
+        m_idle_ports.erase( m_idle_ports.begin() );
+    }
+}
+
 void rfcomm_multipexer::clear()
 {
     m_local_cid = 0x00;
@@ -1140,7 +1163,7 @@ void rfcomm_multipexer::handle_multipexer_pn
     std::shared_ptr<multipexer_pn_message> const& a_pn
     )
 {
-    bool local_inited = !( a_pn->is_command() );
+    bool local_inited_port = !( a_pn->is_command() );
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
     auto [remote_address,has_address] = acl_db->get_address( a_rfc_header.get_acl_handle() );
@@ -1152,7 +1175,7 @@ void rfcomm_multipexer::handle_multipexer_pn
 
     uint8_t port = a_pn->get_port();
 
-    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
+    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited_port );
     if( !p_port )
     {
         if( !m_idle_ports.empty() )
@@ -1169,13 +1192,13 @@ void rfcomm_multipexer::handle_multipexer_pn
             m_worked_ports.emplace_back( p_port );
         }
         p_port->set_dlci( a_pn->get_dlci() );
-        p_port->set_local_inited( local_inited );
+        p_port->set_local_inited( local_inited_port );
         p_port->set_remote_device( remote_address );
         p_port->set_control_sender( std::bind( &rfcomm_multipexer::send_multipexer_message,
             this, std::placeholders::_1 ) );
         p_port->set_port_sender( std::bind( &rfcomm_multipexer::send_port_data, this,
             std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
-        auto callback = m_callback_finder( p_port->get_port(), local_inited );
+        auto callback = m_callback_finder( p_port->get_port(), local_inited_port );
         if( callback )
         {
             p_port->set_port_callback( callback );
@@ -1184,7 +1207,7 @@ void rfcomm_multipexer::handle_multipexer_pn
         {
             LogUtilError() << "There is no callback register for port: " <<
                 static_cast< uint16_t >( p_port->get_port() ) << ", local inited: "
-                << std::boolalpha << local_inited;
+                << std::boolalpha << local_inited_port;
         }
     }
 
@@ -1382,6 +1405,10 @@ void rfcomm_multipexer::check_working_port()
         if( !( *it )->is_working() )
         {
             m_idle_ports.push_back( *it );
+            if( m_idle_ports.size() > 5 )
+            {
+                m_idle_ports.erase( m_idle_ports.begin() );
+            }
             it = m_worked_ports.erase( it );
         }
         else
@@ -1406,6 +1433,15 @@ void rfcomm_multipexer::cached_pending_outgoing_connect_request
     }
 
     m_pending_outgoing_connect_request.push_back( a_request );
+}
+
+void rfcomm_multipexer::start_next_pending_port_connect()
+{
+    if( m_pending_outgoing_connect_request.empty() )
+    {
+        LogUtilDebug() << "no pending port connection request to do";
+        return;
+    }
 }
 
 void rfcomm_multipexer::disconnect_low_channel()

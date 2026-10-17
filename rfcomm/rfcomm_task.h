@@ -32,6 +32,7 @@ enum class rfcomm_task_type : uint8_t
     disconnect_specified_port = 0x03, /* disconnect specified device's connected specified port*/
     async_send_spp_data = 0x04, /* Send spp port data to remote device.*/
     connect_specified_port = 0x05, /* Connect remote device's port*/
+    remove_specific_port = 0x06, /* remove specific rfcomm port connection */
 };
 
 class rfcomm_task : public framework::abstract_task

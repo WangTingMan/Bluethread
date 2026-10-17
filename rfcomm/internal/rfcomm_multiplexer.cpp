@@ -992,7 +992,7 @@ void rfcomm_multipexer::remove_port_connection( uint8_t a_port, bool a_local_ini
     }
 
     m_idle_ports.push_back( port );
-    if( m_idle_ports.size() > 5 )
+    if( m_idle_ports.size() > s_max_idle_port_cached )
     {
         m_idle_ports.erase( m_idle_ports.begin() );
     }
@@ -1405,7 +1405,7 @@ void rfcomm_multipexer::check_working_port()
         if( !( *it )->is_working() )
         {
             m_idle_ports.push_back( *it );
-            if( m_idle_ports.size() > 5 )
+            if( m_idle_ports.size() > s_max_idle_port_cached )
             {
                 m_idle_ports.erase( m_idle_ports.begin() );
             }

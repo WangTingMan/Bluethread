@@ -200,10 +200,10 @@ void rfcomm_module::register_callback( rfcomm_port_callback_block a_callback )
     for( auto& ele : m_port_callbacks )
     {
         if( ele->port_number == a_callback.port_number &&
-            ele->local_inited == a_callback.local_inited )
+            ele->is_local_port == a_callback.is_local_port )
         {
             LogUtilError() << "port callback for port: " << static_cast<uint32_t>(a_callback.port_number)
-                << std::boolalpha << ", local inited: " << a_callback.local_inited
+                << std::boolalpha << ", local inited: " << a_callback.is_local_port
                 << ", already registered";
             return;
         }
@@ -255,7 +255,7 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
     mulx->set_acl_handle( a_request->m_acl_handle );
     mulx->handle_channel_connection_request( a_request );
     mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
-        std::placeholders::_1, std::placeholders::_2 ) );
+        std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
 }
 
 void rfcomm_module::handle_config_request( std::shared_ptr<l2cap_config_request> const& a_request )
@@ -321,7 +321,7 @@ void rfcomm_module::handle_connection_state_changed
         mulx->set_local_cid( a_local_cid );
         mulx->set_remote_device( a_address );
         mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
-            std::placeholders::_1, std::placeholders::_2 ) );
+            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
     }
 
     mulx->set_local_cid( a_local_cid );
@@ -413,7 +413,7 @@ void rfcomm_module::connect_specific_port( std::shared_ptr<rfcomm_task_connect_p
         {
             mulx = std::make_shared<rfcomm_multipexer>();
             mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
-                std::placeholders::_1, std::placeholders::_2 ) );
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
         }
 
         m_working_multipexer.emplace_back( mulx );
@@ -421,7 +421,7 @@ void rfcomm_module::connect_specific_port( std::shared_ptr<rfcomm_task_connect_p
         mulx->set_local_init_connect();
         mulx->set_remote_device( a_task->address );
         mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
-            std::placeholders::_1, std::placeholders::_2 ) );
+            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
     }
 
     if( mulx )
@@ -465,17 +465,42 @@ std::shared_ptr<rfcomm_multipexer> rfcomm_module::find_multipexer_by_remote( blu
     return nullptr;
 }
 
-std::shared_ptr<rfcomm_port_callback_block> rfcomm_module::find_port_callback( uint8_t a_port, bool a_local_inited )
+std::shared_ptr<rfcomm_port_callback_block> rfcomm_module::find_port_callback
+    (
+    uint8_t a_port,
+    bool a_is_local_port,
+    bluetooth_address a_peer_address
+    )
 {
     std::shared_lock<std::shared_mutex> locker( m_mutex );
     for( auto& ele : m_port_callbacks )
     {
-        if( ele->port_number == a_port &&
-            ele->local_inited == a_local_inited )
+        if( ele->port_number != a_port )
+        {
+            continue;
+        }
+
+        if( a_is_local_port )
+        {
+            if( ele->is_local_port )
+            {
+                return ele;
+            }
+            else
+            {
+                LogUtilError() << "did not register callback for local port: " << uint32_t( a_port );
+                return nullptr;
+            }
+        }
+
+        if( ele->remote_address == a_peer_address )
         {
             return ele;
         }
     }
+
+    LogUtilError() << "no callback registered for port " << uint32_t( a_port )
+        << ", address " << a_peer_address.to_string();
     return nullptr;
 }
 

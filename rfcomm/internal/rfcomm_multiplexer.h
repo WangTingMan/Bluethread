@@ -353,7 +353,7 @@ public:
 
     void set_rfcomm_port_callback_finder
         (
-        std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool )> a_callback
+        std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool, bluetooth_address )> a_callback
         )
     {
         m_callback_finder = a_callback;
@@ -445,7 +445,7 @@ private:
     std::vector<std::shared_ptr<rfcomm_task_connect_port>> m_pending_outgoing_connect_request;
     std::vector<std::shared_ptr<rfcomm_port_connection>> m_worked_ports;
     std::vector<std::shared_ptr<rfcomm_port_connection>> m_idle_ports;
-    std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool )> m_callback_finder;
+    std::function<std::shared_ptr<rfcomm_port_callback_block>( uint8_t, bool, bluetooth_address )> m_callback_finder;
 };
 
 }

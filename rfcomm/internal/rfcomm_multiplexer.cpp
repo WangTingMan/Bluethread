@@ -1213,7 +1213,8 @@ void rfcomm_multipexer::handle_multipexer_pn
             this, std::placeholders::_1 ) );
         p_port->set_port_sender( std::bind( &rfcomm_multipexer::send_port_data, this,
             std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
-        auto callback = m_callback_finder( p_port->get_port(), local_inited_port_connection );
+        bool is_local_port = a_pn->is_command_in_uih();
+        auto callback = m_callback_finder( p_port->get_port(), is_local_port, remote_address );
         if( callback )
         {
             p_port->set_port_callback( callback );
@@ -1494,7 +1495,7 @@ void rfcomm_multipexer::start_next_pending_port_connect()
         p_port = std::make_shared<rfcomm_port_connection>();
         m_worked_ports.emplace_back( p_port );
     }
-    bool local_inited_port_connection = true;
+    bool is_local_port = false;
     p_port->clear();
     p_port->set_dlci( make_dlci_for_remote_port( connect_request->port, m_local_inited ) );
     p_port->set_local_inited_port( true );
@@ -1504,7 +1505,7 @@ void rfcomm_multipexer::start_next_pending_port_connect()
         this, std::placeholders::_1 ) );
     p_port->set_port_sender( std::bind( &rfcomm_multipexer::send_port_data, this,
         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3 ) );
-    auto callback = m_callback_finder( p_port->get_port(), local_inited_port_connection );
+    auto callback = m_callback_finder( p_port->get_port(), is_local_port, connect_request->address );
     if( callback )
     {
         p_port->set_port_callback( callback );
@@ -1513,7 +1514,7 @@ void rfcomm_multipexer::start_next_pending_port_connect()
     {
         LogUtilError() << "There is no callback register for port: " <<
             static_cast<uint16_t>( p_port->get_port() ) << ", local inited: "
-            << std::boolalpha << local_inited_port_connection;
+            << std::boolalpha << !is_local_port;
     }
     p_port->start();
 

@@ -285,12 +285,12 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 }
 
                 if( callback->port_number != get_port().get_port() ||
-                    callback->local_inited != false )
+                    !callback->is_local_port )
                 {
                     get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
                     LogUtilError() << "reject connection request. callback: port = " << static_cast< uint32_t >( callback->port_number )
-                        << ", local inited = " << std::boolalpha << callback->local_inited
+                        << ", is local port = " << std::boolalpha << callback->is_local_port
                         << "; state port = " << static_cast< uint32_t >( get_port().get_port() )
                         << ", local inited = " << get_port().local_inited_port_connection();
                     return true;

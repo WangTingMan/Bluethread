@@ -27,6 +27,11 @@
 namespace bluetooth
 {
 
+/**
+* Callback block for RFCOMM port events.
+* This structure is intended for use by bluetooth profiles (e.g. SPP, HFP),
+* and is NOT exposed directly to user applications.
+*/
 struct rfcomm_port_callback_block
 {
     /**
@@ -38,7 +43,14 @@ struct rfcomm_port_callback_block
      * True then the port is on local device; otherwise the port is on remote
      * device
      */
-    bool local_inited = false;
+    bool is_local_port = false;
+
+    /**
+     * Remote peer bluetooth address.
+     * Valid only when @ref is_local_port is false, identifies the remote device
+     * where this RFCOMM port resides.
+     */
+    bluetooth_address remote_address;
 
     /**
      * which module will handle these callback
@@ -46,20 +58,29 @@ struct rfcomm_port_callback_block
     std::string handle_module;
 
     /**
-     * received a connection request from remote device
+     * Callback invoked when receiving an incoming connection request from peer.
+     * Only valid and will be triggered when @ref is_local_port is true:
+     * peer device attempts to connect to this local RFCOMM port,
+     * upper layer module decides whether to accept this incoming connection.
+     * If @ref is_local_port is false (port resides on remote device),
+     * this callback will never be called.
+     * Parameter: remote peer bluetooth address.
      */
     std::function<void( bluetooth_address )> connection_request_callback;
 
     /**
-     * the connection status changed callback
+     * Callback for RFCOMM port connection status change events.
+     * @param bluetooth_address Remote peer address
+     * @param connection_status New connection state of this port
      */
     std::function<void( bluetooth_address, connection_status )> connection_changed_callback;
 
     /**
      * Received remote user data from remote device.
-     * the first parameter is the raw hci data; the second parameter is the offset to the
-     * raw hci data; and the third parameter is the total uaer data size; the forth parameter
-     * is the device who sends the user data
+     * @param shared_ptr<hci_data> Raw hci data buffer
+     * @param uint32_t Offset to the start of user data inside raw hci data
+     * @param uint32_t Total user data size
+     * @param bluetooth_address Peer device sending this user data
      */
     std::function<void( std::shared_ptr<hci_data>, uint32_t, uint32_t, bluetooth_address )> data_callback;
 };

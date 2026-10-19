@@ -186,7 +186,7 @@ void spp_module::handle_service_record_registered
 
     rfcomm_port_callback_block cb;
     cb.port_number = a_port;
-    cb.local_inited = false;
+    cb.is_local_port = true;
     cb.handle_module = s_spp_module_name;
     cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed, this, std::placeholders::_1,
         std::placeholders::_2, a_port, false );

@@ -87,7 +87,29 @@ private:
 
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_remote( bluetooth_address const& a_address );
 
-    std::shared_ptr<rfcomm_port_callback_block> find_port_callback( uint8_t a_port, bool a_local_inited );
+    /**
+     * @brief Lookup registered RFCOMM port callback block.
+     *
+     * Search callback registry for matching rfcomm_port_callback_block entry.
+     * Composite lookup key: port number, local-port flag and peer bluetooth address.
+     *
+     * @param a_port RFCOMM server channel(port) number
+     * @param a_is_local_port true if this is a local listening port; false for remote peer port
+     * @param a_peer_address Remote peer Bluetooth address.
+     *        When @p a_is_local_port is true: this parameter is ignored during matching.
+     *        When @p a_is_local_port is false: must supply valid peer Bluetooth address for lookup.
+     * @return shared_ptr to matched callback block; returns empty shared_ptr if no entry found.
+     *
+     * @note Matching rule:
+     *       - a_is_local_port = true: match only by port number, peer address is not used for comparison.
+     *       - a_is_local_port = false: match requires port number AND valid peer address both identical.
+     */
+    std::shared_ptr<rfcomm_port_callback_block> find_port_callback
+        (
+        uint8_t a_port,
+        bool a_is_local_port,
+        bluetooth_address a_peer_address
+        );
 
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_working_multipexer;
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_idle_multipexer;

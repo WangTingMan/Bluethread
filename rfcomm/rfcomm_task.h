@@ -20,6 +20,7 @@
 
 #include "bluetooth_address.h"
 #include "uuid.h"
+#include "rfcomm/rfcomm_common.h"
 
 namespace bluetooth
 {
@@ -33,6 +34,7 @@ enum class rfcomm_task_type : uint8_t
     async_send_spp_data = 0x04, /* Send spp port data to remote device.*/
     connect_specified_port = 0x05, /* Connect remote device's port*/
     remove_specific_port = 0x06, /* remove specific rfcomm port connection */
+    port_callback_operation = 0x07, /* to register or unregister port callback */
 };
 
 class rfcomm_task : public framework::abstract_task
@@ -121,6 +123,19 @@ public:
 
     bluetooth_address address;
     uint8_t port = 0;
+};
+
+class rfcomm_task_port_callback_operation : public rfcomm_task
+{
+public:
+
+    rfcomm_task_port_callback_operation()
+    {
+        m_type = rfcomm_task_type::port_callback_operation;
+    }
+
+    bool to_register = true;
+    rfcomm_port_callback_block port_callback;
 };
 
 }

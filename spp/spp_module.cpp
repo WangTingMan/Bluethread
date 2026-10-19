@@ -194,16 +194,11 @@ void spp_module::handle_service_record_registered
     cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
         std::placeholders::_4, a_port, false );
 
-    auto mod = framework_manager::get_instance().get_module_manager().get_module( rfcomm_module::s_rfcomm_module_name );
-    auto detail_module = std::static_pointer_cast<rfcomm_module> ( mod );
-    if( detail_module )
-    {
-        detail_module->register_callback( cb );
-    }
-    else
-    {
-        LogUtilError() << "Cannot register the port callback";
-    }
+    auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();
+    tsk->to_register = true;
+    tsk->port_callback = cb;
+    tsk->set_source_module( get_name() );
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 
 void spp_module::handle_connection_request
@@ -333,6 +328,21 @@ void spp_module::handle_connection_changed
     task->set_fun( fun, abstract_module::s_general_seq_task_runner_module );
     task->set_source_module( s_spp_module_name );
     framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+
+    if( a_local_inited && a_status == connection_status::disconnected )
+    {
+        LogUtilDebug() << "unregister the callback since already disconnected remote port";
+        rfcomm_port_callback_block cb;
+        cb.port_number = a_port;
+        cb.is_local_port = false;
+        cb.remote_address = a_address;
+
+        auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();
+        tsk->to_register = false;
+        tsk->port_callback = cb;
+        tsk->set_source_module( get_name() );
+        framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+    }
 }
 
 void spp_module::handle_bluetoot_event( std::shared_ptr<bluetooth_common_event> const& a_bt_event )
@@ -441,6 +451,23 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     task->port = spp_attris.port;
     task->address = a_detail_task->address;
     bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+
+    rfcomm_port_callback_block cb;
+    cb.port_number = spp_attris.port;
+    cb.is_local_port = false;
+    cb.remote_address = remote_address;
+    cb.handle_module = s_spp_module_name;
+    cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed, this, std::placeholders::_1,
+        std::placeholders::_2, spp_attris.port, true );
+    cb.connection_request_callback = std::bind( &spp_module::handle_connection_request, this, std::placeholders::_1, spp_attris.port );
+    cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+        std::placeholders::_4, spp_attris.port, true );
+
+    auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();
+    tsk->to_register = true;
+    tsk->port_callback = cb;
+    tsk->set_source_module( get_name() );
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 
     LogUtilDebug() << "remote rfcomm port number is " << uint32_t( spp_attris.port );
 }

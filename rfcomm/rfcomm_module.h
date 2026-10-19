@@ -54,12 +54,9 @@ public:
 
     void handle_event( std::shared_ptr<framework::framework_event> a_event )override;
 
-    /**
-     * Other module may call this method directly with cross thread
-     */
-    void register_callback( rfcomm_port_callback_block a_callback );
-
 private:
+
+    void register_callback( rfcomm_port_callback_block a_callback );
 
     void handle_connect_request( std::shared_ptr<connection_request> const& a_request );
 
@@ -79,6 +76,8 @@ private:
     void handle_sdu( std::shared_ptr<hci_data> );
 
     void connect_specific_port( std::shared_ptr<rfcomm_task_connect_port> a_task );
+
+    void do_port_callback_operation( std::shared_ptr<rfcomm_task_port_callback_operation> a_task );
 
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
         (
@@ -113,8 +112,6 @@ private:
 
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_working_multipexer;
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_idle_multipexer;
-
-    std::shared_mutex m_mutex;
     std::vector<std::shared_ptr<rfcomm_port_callback_block>> m_port_callbacks;
 };
 

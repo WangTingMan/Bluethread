@@ -47,11 +47,11 @@ enum class rfcomm_port_event_type : uint8_t
     invalid = 0x00,
     multipexer_message_type = 0x01, // m_mulx_msg is valid
     controlling_message = 0x02, // SABM, DM, DISC, UH frame. m_rfcomm_header is valid
-    send_multipexer_meesage_type = 0x03, // send m_mulx_msg to remote device
     port_uih_type = 0x04, // the receive UIH data on the port. m_rfcomm_header and m_raw_data are valid
     accept_connection_request = 0x05,
     reject_connection_request = 0x06,
     disconnect_port = 0x07, // upper layer request disconnet current port
+    connect_port = 0x08,
 };
 
 std::ostream& operator<<( std::ostream& a_os, rfcomm_port_state_type a_state );
@@ -113,9 +113,9 @@ public:
 
 protected:
 
-    void handle_parameter_negotiation( std::shared_ptr<multipexer_pn_message> const& a_pn );
+    void handle_parameter_negotiation_request( std::shared_ptr<multipexer_pn_message> const& a_pn );
 
-    void send_connection_request( std::shared_ptr<multipexer_pn_message> const& a_pn );
+    void do_connect_port();
 
     void on_enter()override;
 
@@ -155,15 +155,27 @@ public:
 
     }
 
+    ~rfcomm_port_wait_pn_rsp_state();
+
     bool handle_event( uint32_t event, void* p_data )override;
 
     bool handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )override;
 
 protected:
 
+    void handle_parameter_negotiation_response( std::shared_ptr<multipexer_pn_message> a_pn_rsp );
+
     void on_enter()override;
 
     void on_exit()override;
+
+    void handle_life_timeout();
+
+    void cancel_life_timer();
+
+private:
+
+    uint32_t m_life_timer_id = 0;
 };
 
 class rfcomm_port_modem_config_state : public rfcomm_port_base_state
@@ -273,14 +285,19 @@ public:
 
     rfcomm_port_connection();
 
-    bool local_inited()const
+    bool local_inited_port_connection()const
     {
-        return m_local_inited;
+        return m_local_inited_port;
     }
 
-    void set_local_inited( bool a_local_inited = true )
+    void set_local_inited_port( bool a_local_inited = true )
     {
-        m_local_inited = a_local_inited;
+        m_local_inited_port = a_local_inited;
+    }
+
+    void set_local_inited_multiplexer( bool a_local_inited = true )
+    {
+        m_local_inited_multiplexer = a_local_inited;
     }
 
     bluetooth_address const& get_remote_device()const
@@ -364,6 +381,11 @@ public:
         return get_id() != static_cast<int>( rfcomm_port_state_type::idle_state );
     }
 
+    /**
+     * Connect the port which located on remote device
+     */
+    void connect( uint8_t a_port );
+
 private:
 
     void handle_received_uih_data_internal
@@ -401,7 +423,14 @@ private:
 
     static constexpr uint16_t s_remote_max_default_frame_size = 127;
 
-    bool m_local_inited = false;
+    /**
+     * @brief Whether this port connection was initiated by local device.
+     *
+     * True: Local device initiated connection to a port that is listening on the peer remote device.
+     * False: Peer device initiated connection to a port listening on the local device.
+     */
+    bool m_local_inited_port = false;
+    bool m_local_inited_multiplexer = false;
     uint8_t m_dlci = 0x00;
     bluetooth_address m_remote_device;
     bool m_remote_credit_supported = false;

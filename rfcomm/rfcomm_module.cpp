@@ -250,9 +250,9 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
     }
 
     m_working_multipexer.emplace_back( mulx );
+    mulx->start();
     mulx->set_remote_device( address );
     mulx->set_acl_handle( a_request->m_acl_handle );
-    mulx->start();
     mulx->handle_channel_connection_request( a_request );
     mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
         std::placeholders::_1, std::placeholders::_2 ) );
@@ -315,20 +315,24 @@ void rfcomm_module::handle_connection_state_changed
     {
         LogUtilError() << "no such multipexer entity for channel id: " << a_local_cid << ". state: "
             << a_state;
-        auto acl_db = framework_manager::get_instance().get_info_manager()
-            .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
-        auto [acl, status] = acl_db->get_handle( a_address );
         mulx = std::make_shared<rfcomm_multipexer>();
+        mulx->start();
         m_working_multipexer.emplace_back( mulx );
         mulx->set_local_cid( a_local_cid );
         mulx->set_remote_device( a_address );
-        mulx->set_acl_handle( acl );
-        mulx->start();
         mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
             std::placeholders::_1, std::placeholders::_2 ) );
     }
 
     mulx->set_local_cid( a_local_cid );
+    if( mulx->get_acl_handle() == 0 )
+    {
+        auto acl_db = framework_manager::get_instance().get_info_manager()
+            .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+        auto [acl, status] = acl_db->get_handle( a_address );
+        mulx->set_acl_handle( acl );
+    }
+
     mulx->handle_connection_state_changed( a_address, a_local_cid, a_remote_cid, a_state );
 
     if( l2cap_channel_state_type::close_state == a_state )
@@ -351,13 +355,6 @@ void rfcomm_module::handle_connection_state_changed
 
 void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
 {
-    static int i = 0;
-    i++;
-    if( i == 3 )
-    {
-        i = 90;
-    }
-
     if( a_hci->m_type != uart_hci_type::acl_type )
     {
         LogUtilError( "not ACL type HCI packet" );
@@ -372,7 +369,6 @@ void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
     }
     _l2cap_header.parse_from_raw_data( a_hci->m_buffer.data(), a_hci->m_buffer.size() );
 
-    uint16_t local_cid = _l2cap_header.get_channel_id();
     uint16_t acl_handle = _l2cap_header.get_acl_handle();
     std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_acl_handle( acl_handle );
     if( mulx )
@@ -381,7 +377,25 @@ void rfcomm_module::handle_sdu( std::shared_ptr<hci_data> a_hci )
     }
     else
     {
-        LogUtilError() << "no such multipexer entity for channel id: " << local_cid;
+        LogUtilDebug() << "no such multipexer entity for ACL handle: " << acl_handle
+            << ", try to use address to find.";
+        auto acl_connections = framework_manager::get_instance().get_info_manager()
+            .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+        auto [address, has_address] = acl_connections->get_address( acl_handle );
+        if( !has_address )
+        {
+            LogUtilError() << "the acl connection db has not record for acl handle: " << acl_handle;
+            return;
+        }
+
+        std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_remote( address );
+        if( !mulx )
+        {
+            LogUtilError() << "No multipexer for device: " << address.to_string();
+            return;
+        }
+        mulx->set_acl_handle( acl_handle );
+        mulx->handle_sdu( a_hci );
     }
 }
 
@@ -398,12 +412,16 @@ void rfcomm_module::connect_specific_port( std::shared_ptr<rfcomm_task_connect_p
         else
         {
             mulx = std::make_shared<rfcomm_multipexer>();
+            mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
+                std::placeholders::_1, std::placeholders::_2 ) );
         }
 
         m_working_multipexer.emplace_back( mulx );
+        mulx->start();
         mulx->set_local_init_connect();
         mulx->set_remote_device( a_task->address );
-        mulx->start();
+        mulx->set_rfcomm_port_callback_finder( std::bind( &rfcomm_module::find_port_callback, this,
+            std::placeholders::_1, std::placeholders::_2 ) );
     }
 
     if( mulx )

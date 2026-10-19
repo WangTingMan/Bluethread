@@ -420,7 +420,7 @@ std::shared_ptr<multipexer_message> multipexer_message::parse_from( uint8_t* a_b
     }
 
     msg = make( type );
-    msg->m_is_command = is_command;
+    msg->m_is_command_in_uih = is_command;
     msg->m_type = type;
     msg->m_message_length = message_length;
 
@@ -460,7 +460,7 @@ void multipexer_pn_message::to_buffer( uint8_t* a_buffer, uint16_t a_size )
 
     a_buffer[0] = static_cast< uint8_t >( multipexer_message_type::pn ) << 2;
     a_buffer[0] |= 0x01; // set EA bit
-    if( m_is_command )
+    if( m_is_command_in_uih )
     {
         a_buffer[0] |= 0x02; // set bit 2, C/R bit
     }
@@ -497,7 +497,7 @@ bool multipexer_pn_message::parse_detail( uint8_t* a_buffer, uint32_t a_size )
 
     m_dlci = a_buffer[0] & 0x3F;
     uint8_t cl_field = a_buffer[1] >> 4;
-    if( m_is_command )
+    if( m_is_command_in_uih )
     {
         m_credit_supported = ( cl_field == CREDIT_FLAG_VALUE_IN_REQUEST );
     }
@@ -537,7 +537,7 @@ void multipexer_msc_message::to_buffer( uint8_t* a_buffer, uint16_t a_size )
 
     a_buffer[0] = static_cast< uint8_t >( multipexer_message_type::msc ) << 2;
     a_buffer[0] |= 0x01; // set EA bit
-    if( m_is_command )
+    if( m_is_command_in_uih )
     {
         a_buffer[0] |= 0x02; // set bit 2, C/R bit
     }

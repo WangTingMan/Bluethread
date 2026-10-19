@@ -53,6 +53,58 @@ uint8_t rfcomm_calc_fcs( uint8_t* p, uint16_t len );
 bool rfcomm_check_fcs( uint8_t* p, uint16_t len, uint8_t received_fcs );
 
 /**
+ * @brief Generate RFCOMM DLCI for remote-side server channel(port), conform to TS 27.010
+ *
+ * RFCOMM DLCI encoding rule:
+ * DLCI = (server_channel << 1) | D_bit
+ * D-bit definition (per TS 27.010):
+ * - D = 1: The target server channel(port) resides on the device that initiated the RFCOMM multiplexer L2CAP connection.
+ * - D = 0: The target server channel(port) resides on the device that accepted the RFCOMM multiplexer L2CAP connection.
+ *
+ * This function is used for creating DLCI to access port located on remote peer device.
+ *
+ * @param a_port_on_remote Remote RFCOMM server channel number(port), valid range [1,30]
+ * @param a_local_is_multiplexer_l2cap_initiator true: local device is the initiator of mux L2CAP connection;
+ *                              false: local device is the acceptor of mux L2CAP connection.
+ * @return uint8_t constructed DLCI value for remote port.
+ * @note Input port out of [1,30] is undefined behaviour, caller should validate before call.
+ */
+inline uint8_t make_dlci_for_remote_port( uint8_t a_port_on_remote, bool a_local_is_multiplexer_l2cap_initiator )
+{
+    // Target port is on remote side:
+    // If local is mux initiator -> remote is acceptor -> D=0
+    // If local is mux acceptor -> remote is initiator -> D=1
+    uint8_t d_bit = a_local_is_multiplexer_l2cap_initiator ? 0U : 1U;
+    return static_cast<uint8_t>( ( a_port_on_remote << 1 ) | d_bit );
+}
+
+/**
+ * @brief Generate RFCOMM DLCI for local-side server channel(port), conform to TS 27.010
+ *
+ * RFCOMM DLCI encoding rule:
+ * DLCI = (server_channel << 1) | D_bit
+ * D-bit definition (per TS 27.010):
+ * - D = 1: The target server channel(port) resides on the device that initiated the RFCOMM multiplexer L2CAP connection.
+ * - D = 0: The target server channel(port) resides on the device that accepted the RFCOMM multiplexer L2CAP connection.
+ *
+ * This function is used for creating DLCI to access port located on local device.
+ *
+ * @param a_port_on_local Local RFCOMM server channel number(port), valid range [1,30]
+ * @param a_local_is_multiplexer_l2cap_initiator true: local device is the initiator of mux L2CAP connection;
+ *                              false: local device is the acceptor of mux L2CAP connection.
+ * @return uint8_t constructed DLCI value for local port.
+ * @note Input port out of [1,30] is undefined behaviour, caller should validate before call.
+ */
+inline uint8_t make_dlci_for_local_port( uint8_t a_port_on_local, bool a_local_is_multiplexer_l2cap_initiator )
+{
+    // Target port is on local side:
+    // If local is mux initiator -> local is initiator -> D=1
+    // If local is mux acceptor -> local is acceptor -> D=0
+    uint8_t d_bit = a_local_is_multiplexer_l2cap_initiator ? 1U : 0U;
+    return static_cast<uint8_t>( ( a_port_on_local << 1 ) | d_bit );
+}
+
+/**
  * For UIH frame, if P/F bit equals 1, then the header contains address, control,
  * length indicator( 1 or 2 bytes ), and credits field; if P/F bit equals 0, then
  * the header contains address, control, length indicator( 1 or 2 bytes).
@@ -98,6 +150,7 @@ public:
      */
     bool poll_final_set()const;
 
+    /*Set the P/F bits as specified in the explanatory note at the end of section 10.3.5 of RFCOMM document*/
     void set_poll_final( bool a_pf );
 
     /**
@@ -148,6 +201,18 @@ private:
     uint8_t m_credit_increase_value = 0x00;
 };
 
+/**
+ * @class multiplexer_message
+ * @brief RFCOMM multiplexer control message carried over DLCI=0
+ *
+ * This class represents MCC (Multiplexer Control Command) messages encapsulated
+ * inside UIH frames on DLCI=0, which is dedicated for RFCOMM multiplexer control signaling.
+ * DLCI=0 is reserved and shall not be used for user data DLC.
+ *
+ * Typical MCC commands include PN, MSC, RPN, TEST, NSC, FCS etc.
+ * These control messages manage DLC creation, parameter negotiation, flow control,
+ * link status and other multiplexer-level operations.
+ */
 class multipexer_message
 {
 
@@ -155,6 +220,22 @@ public:
 
     virtual ~multipexer_message();
 
+    /**
+     * @brief Parse RFCOMM MCC multiplexer control message from raw buffer
+     * MCC: Multiplexer Control Channel
+     * Parses MCC message carried in UIH frame on DLCI=0 control channel.
+     * The first byte of a_buffer is the MCC message type identifier,
+     * which determines the specific command type: PN, MSC, RPN, TEST, NSC, FCS.
+     *
+     * @param a_buffer Pointer to raw MCC message payload.
+     *                 The first byte is message type field.
+     * @param a_size Total byte length of the buffer available for parsing.
+     * @return std::shared_ptr<multiplexer_message>
+     *         nullptr if parsing fails, buffer invalid or unknown message type.
+     * @note a_buffer points to MCC payload (not including RFCOMM frame header).
+     *       Caller retains ownership of a_buffer; this function does not take ownership.
+     * @note Supported message types: PN, MSC, RPN, TEST, NSC, FCS.
+     */
     static std::shared_ptr<multipexer_message> parse_from( uint8_t* a_buffer, uint16_t a_size );
 
     virtual uint16_t get_raw_buffer_size() = 0;
@@ -171,14 +252,14 @@ public:
         return m_message_length;
     }
 
-    void set_is_command( bool a_is_command )
+    void set_is_command_in_uih( bool a_is_command )
     {
-        m_is_command = a_is_command;
+        m_is_command_in_uih = a_is_command;
     }
 
-    bool is_command()const
+    bool is_command_in_uih()const
     {
-        return m_is_command;
+        return m_is_command_in_uih;
     }
 
 protected:
@@ -187,7 +268,15 @@ protected:
 
     multipexer_message_type m_type = multipexer_message_type::pn;
     uint16_t m_message_length = 0x00;
-    bool m_is_command = false;
+    /**
+     * @brief C/R bit from the first type octet of RFCOMM UIH frame (MCC message header)
+     *
+     * C/R bit indicates whether this MCC frame is a Command or a Response:
+     * - true: Command frame
+     * - false: Response frame
+     * This bit is extracted from the type byte of MCC message on DLCI=0 UIH frame.
+     */
+    bool m_is_command_in_uih = false;
 };
 
 class multipexer_pn_message : public multipexer_message

@@ -496,6 +496,11 @@ void rfcomm_port_wait_pn_rsp_state::cancel_life_timer()
     m_life_timer_id = 0;
 }
 
+rfcomm_port_modem_config_state::~rfcomm_port_modem_config_state()
+{
+    cancel_life_timer();
+}
+
 bool rfcomm_port_modem_config_state::handle_event( uint32_t event, void* p_data )
 {
     return true;
@@ -535,6 +540,34 @@ bool rfcomm_port_modem_config_state::handle_event( std::shared_ptr<state_machine
             LogUtilInfo() << "Send DISC to remote device to discoonect current port";
             get_port().send_disc_frame();
             transition_to( static_cast<uint32_t>( rfcomm_port_state_type::disc_wait_ua_state ) );
+        }
+        break;
+    case rfcomm_port_event_type::controlling_message:
+        if( event_->m_rfcomm_header )
+        {
+            std::shared_ptr<rfcomm_task_remove_specific_port> task;
+            rfcomm_frame_type frame_ = event_->m_rfcomm_header->get_frame_type();
+            switch( frame_ )
+            {
+            case rfcomm_frame_type::disc:
+                LogUtilDebug() << "remote device wants to disconnect this port";
+                get_port().send_ua_frame();
+                transition_to( static_cast<uint32_t>( rfcomm_port_state_type::idle_state ) );
+                task = std::make_shared<rfcomm_task_remove_specific_port>();
+                task->address = get_port().m_remote_device;
+                task->port = get_port().get_port();
+                task->local_inited = get_port().local_inited_port_connection();
+                task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+                framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+                break;
+            default:
+                LogUtilError() << "rfcom frame type ignored: " << frame_;
+                break;
+            }
+        }
+        else
+        {
+            LogUtilError() << "empty rfcomm header pointer!";
         }
         break;
     default:
@@ -617,11 +650,53 @@ void rfcomm_port_modem_config_state::send_local_modem_status()
 void rfcomm_port_modem_config_state::on_enter()
 {
     send_local_modem_status();
+
+    auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
+    auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+    if( m_modem_config_life_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_modem_config_life_timer_id );
+    }
+
+    m_modem_config_life_timer_id = timer_module_->register_once_timer
+        (
+        [this]( uint32_t a_id, std::string a_name )
+        {
+            handle_life_timeout();
+        },
+        std::chrono::milliseconds( 5000 ),
+        "",
+        rfcomm_module::s_rfcomm_module_name
+        );
 }
 
 void rfcomm_port_modem_config_state::on_exit()
 {
+    cancel_life_timer();
+}
 
+void rfcomm_port_modem_config_state::handle_life_timeout()
+{
+    LogUtilError() << "cannot get UA frame from remote side.";
+    cancel_life_timer();
+    get_port().send_disc_frame();
+    transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
+}
+
+void rfcomm_port_modem_config_state::cancel_life_timer()
+{
+    auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
+    auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+    if( m_modem_config_life_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_modem_config_life_timer_id );
+    }
+    m_modem_config_life_timer_id = 0;
+}
+
+rfcomm_port_sabm_wait_ua_state::~rfcomm_port_sabm_wait_ua_state()
+{
+    cancel_life_timer();
 }
 
 bool rfcomm_port_sabm_wait_ua_state::handle_event( uint32_t event, void* p_data )
@@ -631,17 +706,114 @@ bool rfcomm_port_sabm_wait_ua_state::handle_event( uint32_t event, void* p_data 
 
 bool rfcomm_port_sabm_wait_ua_state::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
 {
+    std::shared_ptr<rfcomm_port_event> event_;
+    event_ = std::static_pointer_cast<rfcomm_port_event>( a_event );
+
+    switch( event_->m_type )
+    {
+    case rfcomm_port_event_type::multipexer_message_type:
+        if( !event_->m_mulx_msg )
+        {
+            LogUtilError() << "Not set mulx msg";
+            return false;
+        }
+
+        switch( event_->m_mulx_msg->get_type() )
+        {
+        default:
+            LogUtilError() << "event type not handle: " << event_->m_mulx_msg->get_type();
+            break;
+        }
+        break;
+    case rfcomm_port_event_type::controlling_message:
+        if( event_->m_rfcomm_header )
+        {
+            rfcomm_frame_type frame_ = event_->m_rfcomm_header->get_frame_type();
+            switch( frame_ )
+            {
+            case rfcomm_frame_type::ua:
+                transition_to_state( rfcomm_port_state_type::modem_config_state );
+                break;
+            case rfcomm_frame_type::dm:
+                {
+                    LogUtilDebug() << "remote device response DM with SABM, so we cannot use this port currently";
+                    transition_to_state( rfcomm_port_state_type::idle_state );
+                    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+                    task->address = get_port().m_remote_device;
+                    task->port = get_port().get_port();
+                    task->local_inited = get_port().local_inited_port_connection();
+                    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+                    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+                }
+                break;
+            default:
+                LogUtilError() << "rfcom frame type ignored: " << frame_;
+                break;
+            }
+        }
+        else
+        {
+            LogUtilError() << "empty rfcomm header pointer!";
+        }
+        break;
+    default:
+        LogUtilError() << "Event type ignored: " << static_cast<uint32_t>( event_->m_type );
+        break;
+    }
+
     return true;
 }
 
 void rfcomm_port_sabm_wait_ua_state::on_enter()
 {
+    auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
+    auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+    if( m_sabm_wait_ua_life_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_sabm_wait_ua_life_timer_id );
+    }
 
+    m_sabm_wait_ua_life_timer_id = timer_module_->register_once_timer
+        (
+        [this]( uint32_t a_id, std::string a_name )
+        {
+            handle_life_timeout();
+        },
+        std::chrono::milliseconds( 5000 ),
+        "",
+        rfcomm_module::s_rfcomm_module_name
+        );
 }
 
 void rfcomm_port_sabm_wait_ua_state::on_exit()
 {
+    cancel_life_timer();
+}
 
+void rfcomm_port_sabm_wait_ua_state::handle_life_timeout()
+{
+    LogUtilError() << "cannot get UA frame from remote side.";
+    cancel_life_timer();
+    get_port().send_dm_frame();
+    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+    task->address = get_port().m_remote_device;
+    task->port = get_port().get_port();
+    task->local_inited = get_port().local_inited_port_connection();
+    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+
+    transition_to_state( rfcomm_port_state_type::idle_state );
+}
+
+void rfcomm_port_sabm_wait_ua_state::cancel_life_timer()
+{
+    auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
+    auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+    if( m_sabm_wait_ua_life_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_sabm_wait_ua_life_timer_id );
+    }
+    m_sabm_wait_ua_life_timer_id = 0;
 }
 
 bool rfcomm_port_disc_wait_ua_state::handle_event( uint32_t event, void* p_data )

@@ -189,6 +189,8 @@ public:
 
     }
 
+    ~rfcomm_port_modem_config_state();
+
     bool handle_event( uint32_t event, void* p_data )override;
 
     bool handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )override;
@@ -202,6 +204,14 @@ protected:
     void on_enter()override;
 
     void on_exit()override;
+
+    void handle_life_timeout();
+
+    void cancel_life_timer();
+
+protected:
+
+    uint32_t m_modem_config_life_timer_id = 0;
 };
 
 class rfcomm_port_sabm_wait_ua_state : public rfcomm_port_base_state
@@ -215,6 +225,8 @@ public:
 
     }
 
+    ~rfcomm_port_sabm_wait_ua_state();
+
     bool handle_event( uint32_t event, void* p_data )override;
 
     bool handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )override;
@@ -224,6 +236,14 @@ protected:
     void on_enter()override;
 
     void on_exit()override;
+
+    void handle_life_timeout();
+
+    void cancel_life_timer();
+
+private:
+
+    uint32_t m_sabm_wait_ua_life_timer_id = 0;
 };
 
 class rfcomm_port_disc_wait_ua_state : public rfcomm_port_base_state

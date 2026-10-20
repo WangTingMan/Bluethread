@@ -472,12 +472,6 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
         }
     }
 
-    std::shared_ptr<rfcomm_task_connect_port> task;
-    task = std::make_shared<rfcomm_task_connect_port>();
-    task->port = spp_attris.port;
-    task->address = a_detail_task->address;
-    bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
-
     rfcomm_port_callback_block cb;
     cb.port_number = spp_attris.port;
     cb.is_local_port = false;
@@ -494,6 +488,16 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     tsk->port_callback = cb;
     tsk->set_source_module( get_name() );
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+
+    /**
+     * The callback shall be registered prior to starting connection establishment.
+     * Otherwise the connection process may try to look up the callback while it is not yet registered.
+     */
+    std::shared_ptr<rfcomm_task_connect_port> task;
+    task = std::make_shared<rfcomm_task_connect_port>();
+    task->port = spp_attris.port;
+    task->address = a_detail_task->address;
+    bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 
     LogUtilDebug() << "remote rfcomm port number is " << uint32_t( spp_attris.port );
 }

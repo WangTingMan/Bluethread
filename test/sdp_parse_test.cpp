@@ -1,5 +1,6 @@
 #include "sdp/sdp_data_element.h"
 #include "spp/spp_sdp_utils.h"
+#include "rfcomm\rfcomm_protocol.h"
 
 #include <cassert>
 #include <vector>
@@ -18,6 +19,15 @@ void protocol_descriptor_list_check( sdp_data_element a_attribute_value );
 int main()
 {
     sample_spp_service_record_list_test();
+
+    auto test = std::make_shared<multiplexer_test_message>();
+    test->set_test_body( { 0x01,0x02 } );
+
+    uint8_t buffer[100];
+    test->to_buffer( buffer, 100 );
+
+    auto msg = multipexer_message::parse_from( buffer, 100 );
+
     return 0;
 }
 

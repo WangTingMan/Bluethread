@@ -376,6 +376,8 @@ std::shared_ptr<multipexer_message> make( multipexer_message_type a_type )
         return std::make_shared<multipexer_msc_message>();
     case bluetooth::multipexer_message_type::nsc:
         return std::make_shared<multipexer_nsc_message>();
+    case bluetooth::multipexer_message_type::test:
+        return std::make_shared<multiplexer_test_message>();
     default:
         LogUtilError() << "To implementation type: " << a_type;
         return std::make_shared<multipexer_message>();
@@ -588,6 +590,75 @@ bool multipexer_msc_message::parse_detail( uint8_t* a_buffer, uint32_t a_size )
     m_ready_received = signals_.test( 3 );
     m_incoming_call = signals_.test( 6 );
     m_data_valid = signals_.test( 7 );
+    return true;
+}
+
+multiplexer_test_message::multiplexer_test_message()
+{
+    m_type = multipexer_message_type::test;
+    m_is_command_in_uih = false;
+    m_message_length = 0;
+}
+
+uint16_t multiplexer_test_message::get_raw_buffer_size()
+{
+    m_message_length = m_test_message_body.size();
+    uint16_t length_byte_size = 1;
+    if( m_test_message_body.size() < 0x7F )
+    {
+        length_byte_size = 1;
+    }
+    else
+    {
+        length_byte_size = 2;
+    }
+    return 1 /*type byte */ + length_byte_size /* length byte*/
+        + m_test_message_body.size()/* value size*/;
+}
+
+void multiplexer_test_message::to_buffer( uint8_t* a_buffer, uint16_t a_size )
+{
+    if( a_size < get_raw_buffer_size() )
+    {
+        LogUtilError() << "need more memory to write.";
+        return;
+    }
+
+    a_buffer[0] = static_cast<uint8_t>( multipexer_message_type::test ) << 2;
+    a_buffer[0] |= 0x01; // set EA bit
+    if( m_is_command_in_uih )
+    {
+        a_buffer[0] |= 0x02; // set bit 2, C/R bit
+    }
+    else
+    {
+        a_buffer[0] &= 0xFD; // clear bit 2, C/R bit
+    }
+
+    uint16_t size = m_test_message_body.size();
+    uint8_t* p_message_body = nullptr;
+    if( size <= 0x7FU )
+    {
+        // single octet, EA=1
+        a_buffer[1] = static_cast<uint8_t>( ( ( size & 0x7FU ) << 1 ) | 0x01U );
+        p_message_body = a_buffer + 2;
+    }
+    else
+    {
+        // two octets
+        // first octet: lower 7 bits, EA=0
+        a_buffer[1] = static_cast<uint8_t>( ( ( size & 0x7FU ) << 1 ) & ~0x01U );
+        // second octet: higher 7 bits, EA=1
+        a_buffer[2] = static_cast<uint8_t>( ( ( size >> 7 ) & 0x7FU ) << 1 | 0x01U );
+        p_message_body = a_buffer + 3;
+    }
+
+    memcpy( p_message_body, m_test_message_body.data(), size );
+}
+
+bool multiplexer_test_message::parse_detail( uint8_t* a_buffer, uint32_t a_size )
+{
+    m_test_message_body.assign( a_buffer, a_buffer + a_size );
     return true;
 }
 

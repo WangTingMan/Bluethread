@@ -1103,7 +1103,15 @@ void rfcomm_multipexer::handle_uih_frame
         case multipexer_message_type::nsc:
             LogUtilError() << "remote cannot use the ommand we sent.";
             break;
+        case multipexer_message_type::test:
+            if( msg->is_command_in_uih() )
+            {
+                msg->set_is_command_in_uih( false );
+                send_multipexer_message( msg );
+            }
+            break;
         default:
+            if( msg->is_command_in_uih() )
             {
                 std::shared_ptr<multipexer_nsc_message> nsc_rsp;
                 nsc_rsp = std::make_shared<multipexer_nsc_message>();

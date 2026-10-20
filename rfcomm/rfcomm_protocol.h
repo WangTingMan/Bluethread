@@ -16,8 +16,10 @@
 
 #pragma once
 #include "../common/protocol_headers.h"
+#include <cstdint>
 #include <iostream>
 #include <memory>
+#include <vector>
 
 namespace bluetooth
 {
@@ -311,7 +313,7 @@ protected:
     }
 
     multipexer_message_type m_type = multipexer_message_type::pn;
-    uint16_t m_message_length = 0x00;
+    uint16_t m_message_length = 0x00;/*the value size*/
     /**
      * @brief C/R bit from the first type octet of RFCOMM UIH frame (MCC message header)
      *
@@ -402,6 +404,47 @@ private:
     uint8_t m_priority = 0x00;
     uint16_t m_max_frame_size = 0x00;
     uint8_t m_credit_init_value = 0x00;
+};
+
+// rfcomm multipexer UIH test message
+class multiplexer_test_message : public multipexer_message
+{
+
+public:
+
+    multiplexer_test_message();
+
+    uint16_t get_raw_buffer_size() override;
+
+    void to_buffer( uint8_t* a_buffer, uint16_t a_size )override;
+
+    void set_test_body( std::vector<uint8_t> a_body )
+    {
+        if( a_body.size() < 0x3FFF )
+        {
+            m_test_message_body = std::move( a_body );
+        }
+        else
+        {
+            auto it = a_body.begin();
+            std::advance( it, 0x3FFE );
+            m_test_message_body.assign( a_body.begin(), it );
+        }
+        m_message_length = m_test_message_body.size();
+    }
+
+    std::vector<uint8_t>const& get_test_body()const
+    {
+        return m_test_message_body;
+    }
+
+protected:
+
+    bool parse_detail( uint8_t* a_buffer, uint32_t a_size )override;
+
+private:
+
+    std::vector<uint8_t> m_test_message_body;
 };
 
 // rfcomm multipexer UIH Modem Status Command message

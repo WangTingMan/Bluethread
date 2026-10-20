@@ -238,8 +238,37 @@ public:
      */
     static std::shared_ptr<multipexer_message> parse_from( uint8_t* a_buffer, uint16_t a_size );
 
-    virtual uint16_t get_raw_buffer_size() = 0;
+    /**
+     * @brief Get total raw buffer size required for RFCOMM MCC control message in UIH frame
+     *
+     * Return total memory region length for MCC control message on UIH frame.
+     * Includes three parts:
+     * 1. Type bytes field
+     * 2. Length bytes field
+     * 3. Value bytes field
+     *
+     * @return uint16_t total required buffer size (type + length + value)
+     * @note Does NOT include UIH frame header / DLCI byte, only MCC message itself.
+     */
+    virtual uint16_t get_raw_buffer_size()
+    {
+        return 2;
+    }
 
+    /**
+     * @brief Serialize RFCOMM MCC control message into provided buffer for UIH frame
+     *
+     * Writes full MCC message content to the memory pointed by a_buffer.
+     * The serialized data consists of three parts:
+     * 1. Type byte
+     * 2. Length byte(s)
+     * 3. Value payload bytes
+     *
+     * @param a_buffer Destination buffer to store serialized MCC message
+     * @param a_size Total available byte count of a_buffer
+     * @note Caller must guarantee a_buffer has enough space (use get_raw_buffer_size() to check).
+     *       This method writes only MCC message itself; UIH frame header and DLCI byte are NOT included.
+     */
     virtual void to_buffer( uint8_t* a_buffer, uint16_t a_size );
 
     multipexer_message_type get_type()const
@@ -264,7 +293,22 @@ public:
 
 protected:
 
-    virtual bool parse_detail( uint8_t* a_buffer, uint32_t a_size ) = 0;
+    /**
+     * @brief Parse payload of UIH frame on RFCOMM DLC 0 (multiplexer control channel)
+     *
+     * Parse the detail value part of RFCOMM MCC message carried by UIH frame on control channel(DLC=0).
+     * For example, the 8-byte body of PN message: a_buffer[0] is the first byte which contains DLCI field.
+     *
+     * @param a_buffer Pointer to start of MCC message content.
+     * @param a_size Total byte length available in a_buffer.
+     * @return bool true if parse success, false for invalid / malformed data.
+     *
+     * @note This function only processes MCC message body, does not parse UIH frame header.
+     */
+    virtual bool parse_detail( uint8_t* a_buffer, uint32_t a_size )
+    {
+        return true;
+    }
 
     multipexer_message_type m_type = multipexer_message_type::pn;
     uint16_t m_message_length = 0x00;
@@ -456,6 +500,43 @@ private:
     bool m_ready_received = false; // True means ready to receive data frames
     bool m_incoming_call = false;
     bool m_data_valid = false; // True means the valid data is sending.
+};
+
+// rfcomm multipexer UIH non support command response
+class multipexer_nsc_message : public multipexer_message
+{
+
+public:
+
+    multipexer_nsc_message();
+
+    void set_command_type_to_reply( multipexer_message_type a_command_type )
+    {
+        m_command_type_to_reply = a_command_type;
+    }
+
+    multipexer_message_type get_command_type_to_reply()const
+    {
+        return m_command_type_to_reply;
+    }
+
+    void set_is_command_to_reply( bool a_is_command = true )
+    {
+        m_is_command_to_reply = a_is_command;
+    }
+
+    uint16_t get_raw_buffer_size() override;
+
+    void to_buffer( uint8_t* a_buffer, uint16_t a_size )override;
+
+protected:
+
+    bool parse_detail( uint8_t* a_buffer, uint32_t a_size )override;
+
+private:
+
+    multipexer_message_type m_command_type_to_reply;
+    bool m_is_command_to_reply = true;
 };
 
 }

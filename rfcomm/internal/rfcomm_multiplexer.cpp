@@ -1100,7 +1100,17 @@ void rfcomm_multipexer::handle_uih_frame
         case multipexer_message_type::msc:
             handle_multipexer_msc( a_header, std::static_pointer_cast<multipexer_msc_message>( msg ) );
             break;
+        case multipexer_message_type::nsc:
+            LogUtilError() << "remote cannot use the ommand we sent.";
+            break;
         default:
+            {
+                std::shared_ptr<multipexer_nsc_message> nsc_rsp;
+                nsc_rsp = std::make_shared<multipexer_nsc_message>();
+                nsc_rsp->set_command_type_to_reply( msg->get_type() );
+                nsc_rsp->set_is_command_to_reply( msg->is_command_in_uih() );
+                send_multipexer_message( nsc_rsp );
+            }
             LogUtilError() << "multipexer signaling not handled: " << msg->get_type();
             break;
         }

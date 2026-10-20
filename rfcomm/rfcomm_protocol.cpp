@@ -374,11 +374,14 @@ std::shared_ptr<multipexer_message> make( multipexer_message_type a_type )
         return std::make_shared<multipexer_pn_message>();
     case bluetooth::multipexer_message_type::msc:
         return std::make_shared<multipexer_msc_message>();
+    case bluetooth::multipexer_message_type::nsc:
+        return std::make_shared<multipexer_nsc_message>();
     default:
         LogUtilError() << "To implementation type: " << a_type;
+        return std::make_shared<multipexer_message>();
         break;
     }
-    return nullptr;
+    return std::make_shared<multipexer_message>();
 }
 
 multipexer_message::~multipexer_message()
@@ -586,6 +589,60 @@ bool multipexer_msc_message::parse_detail( uint8_t* a_buffer, uint32_t a_size )
     m_incoming_call = signals_.test( 6 );
     m_data_valid = signals_.test( 7 );
     return true;
+}
+
+multipexer_nsc_message::multipexer_nsc_message()
+{
+    m_is_command_in_uih = false;
+    m_type = multipexer_message_type::nsc;
+    m_message_length = 1;
+    m_command_type_to_reply = multipexer_message_type::test;
+}
+
+uint16_t multipexer_nsc_message::get_raw_buffer_size()
+{
+    return 1 /*type byte */ + 1 /* length byte*/ + 1 /* value size*/;
+}
+
+void multipexer_nsc_message::to_buffer( uint8_t* a_buffer, uint16_t a_size )
+{
+    if( a_size < get_raw_buffer_size() )
+    {
+        LogUtilError() << "need more memory to write.";
+        return;
+    }
+
+    a_buffer[0] = static_cast<uint8_t>( multipexer_message_type::nsc ) << 2;
+    a_buffer[0] |= 0x01; // set EA bit
+    a_buffer[0] &= 0xFD; // clear bit 2, C/R bit
+
+    a_buffer[1] = 0x01 << 1; // PN message's length is 8.
+    a_buffer[1] |= 0x01; // set EA
+
+    a_buffer[2] = (uint8_t)m_command_type_to_reply << 2;
+    a_buffer[2] &= ~0x01; // reset EA bit
+    if( m_is_command_to_reply )
+    {
+        a_buffer[2] |= 0x02; // set bit 2, C/R bit
+    }
+    else
+    {
+        a_buffer[2] &= 0xFD; // clear bit 2, C/R bit
+    }
+}
+
+bool multipexer_nsc_message::parse_detail( uint8_t* a_buffer, uint32_t a_size )
+{
+    if( a_size < 1 )
+    {
+        LogUtilError() << "NSC message contains 3 bytes";
+        return false;
+    }
+
+    uint8_t value = a_buffer[0];
+    uint8_t cmd = ( value >> 2 );
+    m_command_type_to_reply = multipexer_message_type( cmd );
+    m_is_command_to_reply = ( value >> 1 ) & 0x01;
 }
 
 }

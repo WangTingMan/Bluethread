@@ -278,12 +278,13 @@ void spp_module::handle_connection_changed
                 break;
             }
         }
+
+        if( !found )
+        {
+            LogUtilError() << "Shall not happen: Local port listened without registered uuid.";
+        }
     }
 
-    if( !found )
-    {
-        LogUtilError() << "Shall not happen: Local port listened without registered uuid.";
-    }
 
     auto connection_ = find( a_address, a_port, a_local_inited );
     if( !connection_ )
@@ -446,6 +447,31 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
         return;
     }
 
+    for( auto& con : m_connections )
+    {
+        auto& con_uuid = con->get_uuid();
+        auto& attr_uuid = a_detail_task->uuids;
+        if( con_uuid.size() != attr_uuid.size() )
+        {
+            continue;
+        }
+
+        bool same = true;
+        for( std::size_t i = 0; i < con_uuid.size(); ++i )
+        {
+            if( con_uuid[i] != attr_uuid[i] )
+            {
+                same = false;
+                break;
+            }
+        }
+
+        if( same )
+        {
+            con->set_port( spp_attris.port );
+        }
+    }
+
     std::shared_ptr<rfcomm_task_connect_port> task;
     task = std::make_shared<rfcomm_task_connect_port>();
     task->port = spp_attris.port;
@@ -593,7 +619,7 @@ void spp_module::connect
 
     if( spp_conn->get_connection_status() != connection_status::disconnected )
     {
-        LogUtilDebug() << "remote device: " << a_address.to_string()
+        LogUtilDebug() << "id: " << spp_conn->get_id() << ", remote device: " << a_address.to_string()
             << ", uuid: " << uuids.front().to_string() << ", connection status: "
             << spp_conn->get_connection_status() << ", reject the connection request";
         return;

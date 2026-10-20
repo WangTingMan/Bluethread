@@ -621,7 +621,6 @@ void acl_manager::send_next_outgoing_packet()
 
         if( m_br_edr_acl_credit <= 0 )
         {
-            LogUtilInfo() << "No more credit to send outgoing packet.";
             return;
         }
 

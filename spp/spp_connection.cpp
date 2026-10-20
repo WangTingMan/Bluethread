@@ -17,19 +17,24 @@
 #include "spp_connection.h"
 #include "framework/log_util.h"
 
+namespace
+{
+    static uint16_t s_next_spp_connection_id = 0;
+}
+
 namespace bluetooth
 {
 
 spp_connection::spp_connection()
+    : m_spp_connection_id( s_next_spp_connection_id++ )
 {
 }
 
 void spp_connection::set_connection_status( connection_status a_status )
 {
-    LogUtilInfo() << "spp port, address " << m_remote_device.to_string() << ", port "
-        << static_cast< uint32_t >( m_port ) << ", local inited: " << std::boolalpha
-        << m_local_inited << ", status changed from " << m_connection_status
-        << " to " << a_status;
+    LogUtilInfo() << "spp port id = " << m_spp_connection_id << ", address " << m_remote_device.to_string()
+        << ", port " << static_cast< uint32_t >( m_port ) << ", local inited: " << std::boolalpha
+        << m_local_inited << ", status changed from " << m_connection_status << " to " << a_status;
     m_connection_status = a_status;
 }
 

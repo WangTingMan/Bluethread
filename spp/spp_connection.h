@@ -107,8 +107,14 @@ public:
         return m_connection_status;
     }
 
+    uint16_t get_id()const
+    {
+        return m_spp_connection_id;
+    }
+
 private:
 
+    uint16_t m_spp_connection_id = 0;
     bool m_local_inited = false;
     std::vector<uuid> m_uuid;
     bluetooth_address m_remote_device;

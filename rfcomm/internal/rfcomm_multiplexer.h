@@ -244,6 +244,8 @@ protected:
 
     void handle_connection_sate_changed( std::shared_ptr<rfcomm_multipexer_event> const& a_event );
 
+    void connect( std::shared_ptr<rfcomm_task_connect_port> a_connect_task );
+
     void on_enter()override;
 
     void on_exit()override;

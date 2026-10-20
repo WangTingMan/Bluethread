@@ -285,6 +285,8 @@ public:
 
 protected:
 
+    void handle_multipexer_message( std::shared_ptr<multipexer_message> const& a_mulx_msg );
+
     void on_enter()override;
 
     void on_exit()override;

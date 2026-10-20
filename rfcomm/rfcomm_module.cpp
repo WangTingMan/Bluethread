@@ -193,6 +193,8 @@ void rfcomm_module::handle_event( std::shared_ptr<framework_event> a_event )
 
 void rfcomm_module::register_callback( rfcomm_port_callback_block a_callback )
 {
+    LogUtilDebug() << "register port callback for port: " << (uint16_t)a_callback.port_number
+        << ( a_callback.is_local_port ? " local port" : " remote port" );
     if( 0x00 == a_callback.port_number )
     {
         LogUtilError() << "Cannot register callback for port 0( multipexer port)";
@@ -477,6 +479,8 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
             {
                 if( ele->is_local_port )
                 {
+                    LogUtilDebug() << "unregister port callback for local port: "
+                        << (uint16_t)( port );
                     it = m_port_callbacks.erase( it );
                     return;
                 }
@@ -489,6 +493,8 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
 
             if( ele->remote_address == peer_addr )
             {
+                LogUtilDebug() << "unregister port callback for remote port: "
+                    << (uint16_t)( port ) << ", on device: " << peer_addr.to_string();
                 it = m_port_callbacks.erase( it );
                 return;
             }
@@ -559,7 +565,8 @@ std::shared_ptr<rfcomm_port_callback_block> rfcomm_module::find_port_callback
     }
 
     LogUtilError() << "no callback registered for port " << uint32_t( a_port )
-        << ", address " << a_peer_address.to_string();
+        << ", address " << a_peer_address.to_string() << ", "
+        << ( a_is_local_port ? "local port" : "remote port" );
     return nullptr;
 }
 

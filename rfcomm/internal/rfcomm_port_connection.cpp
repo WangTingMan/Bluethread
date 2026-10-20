@@ -677,7 +677,7 @@ void rfcomm_port_modem_config_state::on_exit()
 
 void rfcomm_port_modem_config_state::handle_life_timeout()
 {
-    LogUtilError() << "cannot get UA frame from remote side.";
+    LogUtilError() << "state timeout, no state transition for too long, send DISC frame";
     cancel_life_timer();
     get_port().send_disc_frame();
     transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
@@ -929,12 +929,148 @@ bool rfcomm_port_open_state::handle_event( std::shared_ptr<state_machine::abstra
             transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
         }
         break;
+    case rfcomm_port_event_type::multipexer_message_type:
+        handle_multipexer_message( event_->m_mulx_msg );
+        break;
     default:
         LogUtilError() << "Event type not handled: " << static_cast<uint16_t>( event_->m_type );
         break;
     }
 
     return true;
+}
+
+void rfcomm_port_open_state::handle_multipexer_message( std::shared_ptr<multipexer_message> const& a_mulx_msg )
+{
+    if( !a_mulx_msg )
+    {
+        return;
+    }
+
+    auto mul_type = a_mulx_msg->get_type();
+    switch( mul_type )
+    {
+    case multipexer_message_type::pn:
+        {
+            bool need_disc = false;
+            auto detail_mcc = std::static_pointer_cast<multipexer_pn_message>( a_mulx_msg );
+            bool is_cmd = detail_mcc->is_command_in_uih();
+            LogUtilInfo() << "PN is command: " << std::boolalpha << is_cmd
+                << ", is local inited: " << get_port().local_inited_port_connection()
+                << ", remote support credit: "
+                << detail_mcc->support_credit() << ", remote credit value: "
+                << static_cast<uint16_t>( detail_mcc->credit_init_value() );
+
+            get_port().m_remote_credit_supported = detail_mcc->support_credit();
+            get_port().m_remote_priority = detail_mcc->priority();
+            get_port().m_remote_max_frame_size = detail_mcc->max_frame_size();
+            get_port().m_remote_credit_value = detail_mcc->credit_init_value();
+
+            if( is_cmd )
+            {
+                if( detail_mcc->max_frame_size() < 1 )
+                {
+                    LogUtilError() << "frame size cannot been zero!";
+                    need_disc = true;
+                }
+
+                if( need_disc )
+                {
+                    get_port().send_dm_frame();
+                    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+                    task->address = get_port().m_remote_device;
+                    task->port = get_port().get_port();
+                    task->local_inited = get_port().local_inited_port_connection();
+                    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+                    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+                    return;
+                }
+
+                std::shared_ptr<multipexer_pn_message> pn_rsp;
+                get_port().m_local_credit_value = 0x07;
+                pn_rsp = std::make_shared<multipexer_pn_message>();
+                pn_rsp->set_is_command_in_uih( false );
+                pn_rsp->set_dlci( detail_mcc->get_dlci() );
+                pn_rsp->set_support_credit( s_local_support_credit );
+                pn_rsp->set_priority( 0x00 );
+                pn_rsp->set_max_frame_size( s_local_max_frame_size );
+                pn_rsp->set_credit_init_value( get_port().m_local_credit_value );
+
+                if( get_port().m_multi_sender )
+                {
+                    get_port().m_multi_sender( pn_rsp );
+                }
+                else
+                {
+                    LogUtilError() << "No controlling sender";
+                    return;
+                }
+                return;
+            }
+
+            if( detail_mcc->max_frame_size() < 1 )
+            {
+                LogUtilError() << "frame size cannot been zero!";
+                need_disc = true;
+            }
+
+            if( need_disc )
+            {
+                get_port().send_disc_frame();
+                auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+                task->address = get_port().m_remote_device;
+                task->port = get_port().get_port();
+                task->local_inited = get_port().local_inited_port_connection();
+                task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+                framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+                transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
+                return;
+            }
+        }
+        break;
+    case multipexer_message_type::msc:
+        {
+            auto detail_mcc = std::static_pointer_cast<multipexer_msc_message>( a_mulx_msg );
+            if( detail_mcc->is_command_in_uih() )
+            {
+                auto& remote = get_port().m_remote_modem_status;
+                remote.m_data_valid = detail_mcc->data_valid();
+                remote.m_flow_control_on = detail_mcc->flow_control_on();
+                remote.m_incoming_call = detail_mcc->incoming_call();
+                remote.m_ready_communicated = detail_mcc->ready_communicated();
+                remote.m_ready_received = detail_mcc->ready_received();
+
+                std::shared_ptr<multipexer_msc_message> rsp;
+                rsp = std::make_shared<multipexer_msc_message>();
+                rsp->set_is_command_in_uih( false );
+                rsp->set_data_valid( remote.m_data_valid );
+                rsp->set_flow_control_on( remote.m_flow_control_on );
+                rsp->set_incoming_call( remote.m_incoming_call );
+                rsp->set_ready_communicated( remote.m_ready_communicated );
+                rsp->set_ready_received( remote.m_ready_received );
+                rsp->set_dlci( detail_mcc->get_dlci() );
+                if( get_port().m_multi_sender )
+                {
+                    get_port().m_multi_sender( rsp );
+                }
+                else
+                {
+                    LogUtilError() << "Not set multipexer UIH command/response sender";
+                    return;
+                }
+
+                get_port().m_remote_modem_status_configed = true;
+            }
+            else
+            {
+                get_port().m_local_modem_status_configed = true;
+            }
+        }
+        break;
+    default:
+        LogUtilError() << "MCC message not handled, type: " << mul_type;
+        break;
+    }
 }
 
 void rfcomm_port_open_state::on_enter()

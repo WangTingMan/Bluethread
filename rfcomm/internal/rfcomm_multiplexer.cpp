@@ -674,6 +674,9 @@ bool rfcomm_multipexer_connected::handle_event( std::shared_ptr<state_machine::a
     case rfcomm_event_type::l2cap_connetion_state_changed:
         handle_connection_sate_changed( rfc_event );
         break;
+    case rfcomm_event_type::start_request:
+        connect( rfc_event->m_connect_task );
+        break;
     default:
         LogUtilError() << "event type ignored: " << static_cast< uint32_t >( rfc_event->m_type );
         break;
@@ -790,6 +793,17 @@ void rfcomm_multipexer_connected::handle_connection_sate_changed( std::shared_pt
     default:
         LogUtilDebug() << "channel state event ignored.";
     }
+}
+
+void rfcomm_multipexer_connected::connect( std::shared_ptr<rfcomm_task_connect_port> a_connect_task )
+{
+    if( !a_connect_task )
+    {
+        return;
+    }
+
+    get_multipexer().cached_pending_outgoing_connect_request( a_connect_task );
+    get_multipexer().start_next_pending_port_connect();
 }
 
 void rfcomm_multipexer_connected::on_enter()
@@ -909,7 +923,7 @@ void rfcomm_multipexer::send_port_user_data
     }
     else
     {
-        LogUtilError() << "Cannot find port for address: " << m_remote_address.to_string()
+        LogUtilError() << "send user data: Cannot find port for address: " << m_remote_address.to_string()
             << ", port: " << static_cast< uint32_t >( a_port );
     }
 }
@@ -1254,7 +1268,7 @@ void rfcomm_multipexer::handle_multipexer_msc
     std::shared_ptr<multipexer_msc_message> const& a_msc
     )
 {
-    bool local_inited = !a_rfc_header.cr_value_in_header();
+    bool local_inited = false;
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
     auto [remote_address, has_address] = acl_db->get_address( a_rfc_header.get_acl_handle() );
@@ -1265,6 +1279,14 @@ void rfcomm_multipexer::handle_multipexer_msc
     }
 
     uint8_t port = a_msc->get_port();
+    uint8_t target_dlci = a_msc->get_dlci();
+    bool port_on_local = true;
+    uint8_t test_dlci = make_dlci_for_remote_port( port, m_local_inited );
+    if( test_dlci == target_dlci )
+    {
+        port_on_local = false;
+    }
+    local_inited = !port_on_local;
 
     std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
     if( !p_port )

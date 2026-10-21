@@ -207,11 +207,14 @@ protected:
 
     void handle_life_timeout();
 
+    void handle_wait_peer_msc_command_timeout();
+
     void cancel_life_timer();
 
 protected:
 
     uint32_t m_modem_config_life_timer_id = 0;
+    uint32_t m_wait_remote_msc_cmd_timer_id = 0;
 };
 
 class rfcomm_port_sabm_wait_ua_state : public rfcomm_port_base_state

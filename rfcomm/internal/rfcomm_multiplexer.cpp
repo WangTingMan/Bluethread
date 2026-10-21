@@ -1055,6 +1055,15 @@ void rfcomm_multipexer::handle_connection_state_changed
     event_->m_type = rfcomm_event_type::l2cap_connetion_state_changed;
 
     handle_event( event_ );
+
+    if( a_state == l2cap_channel_state_type::close_state )
+    {
+        LogUtilDebug() << "RFCOMM's L2CAP channel disconnected, to drop all port connection";
+        for( auto& ele : m_worked_ports )
+        {
+            ele->handle_multipexer_disconnect();
+        }
+    }
 }
 
 void rfcomm_multipexer::remove_port_connection( uint8_t a_port, bool a_local_inited )

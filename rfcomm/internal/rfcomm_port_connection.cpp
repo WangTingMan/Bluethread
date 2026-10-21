@@ -523,11 +523,6 @@ bool rfcomm_port_modem_config_state::handle_event( std::shared_ptr<state_machine
 {
     std::shared_ptr<rfcomm_port_event> event_;
     event_ = std::static_pointer_cast<rfcomm_port_event>( a_event );
-    if( !event_ )
-    {
-        LogUtilError() << "Unknown event received in idle state";
-        return false;
-    }
 
     switch( event_->m_type )
     {
@@ -671,13 +666,53 @@ void rfcomm_port_modem_config_state::on_enter()
         timer_module_->undregister_timer( m_modem_config_life_timer_id );
     }
 
+    /**
+     * @brief Timer callback safety note:
+     * When timer module dispatches timer task to this module, the target state object may already have been destroyed.
+     * Use weak_ptr to hold reference to state object.
+     * Attempt to convert weak_ptr to shared_ptr before invoking member functions.
+     * Only execute member calls if conversion succeeds; skip processing when object has been released.
+     */
+    std::weak_ptr<rfcomm_port_modem_config_state> weak_thiz;
+    std::shared_ptr<abstract_state> upper_thiz = get_port().find_state( get_id() );
+    weak_thiz = std::static_pointer_cast<rfcomm_port_modem_config_state>( upper_thiz );
     m_modem_config_life_timer_id = timer_module_->register_once_timer
         (
-        [this]( uint32_t a_id, std::string a_name )
+        [weak_thiz]( uint32_t a_id, std::string a_name )
         {
-            handle_life_timeout();
+            std::shared_ptr<abstract_state> upper_thiz = weak_thiz.lock();
+            if( !upper_thiz )
+            {
+                return;
+            }
+            std::shared_ptr<rfcomm_port_modem_config_state> shared_thiz;
+            shared_thiz = std::static_pointer_cast<rfcomm_port_modem_config_state>( upper_thiz );
+            shared_thiz->handle_life_timeout();
         },
         std::chrono::milliseconds( 5000 ),
+        "",
+        rfcomm_module::s_rfcomm_module_name
+        );
+
+    if( m_wait_remote_msc_cmd_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_wait_remote_msc_cmd_timer_id );
+    }
+
+    m_wait_remote_msc_cmd_timer_id = timer_module_->register_once_timer
+        (
+        [weak_thiz]( uint32_t a_id, std::string a_name )
+        {
+            std::shared_ptr<abstract_state> upper_thiz = weak_thiz.lock();
+            if( !upper_thiz )
+            {
+                return;
+            }
+            std::shared_ptr<rfcomm_port_modem_config_state> shared_thiz;
+            shared_thiz = std::static_pointer_cast<rfcomm_port_modem_config_state>( upper_thiz );
+            shared_thiz->handle_wait_peer_msc_command_timeout();
+        },
+        std::chrono::milliseconds( 2000 ),
         "",
         rfcomm_module::s_rfcomm_module_name
         );
@@ -696,6 +731,26 @@ void rfcomm_port_modem_config_state::handle_life_timeout()
     transition_to_state( rfcomm_port_state_type::disc_wait_ua_state );
 }
 
+void rfcomm_port_modem_config_state::handle_wait_peer_msc_command_timeout()
+{
+    /**
+     * @brief MSC handshake procedure, TS 07.10 5.4.6.3.7
+     * Specification requires bidirectional MSC exchange before user data transfer.
+     * Compatibility handling with 2 seconds timeout:
+     * 1. After DLC established, local sends MSC Command and starts 2s timer waiting peer MSC Command.
+     * 2. If peer MSC Command arrives within timeout: reply MSC Response, complete bidirectional handshake and enter OPEN.
+     * 3. If 2s timer expires without receiving peer MSC Command: fallback and enter OPEN state for compatibility.
+     * @note RFCOMM credit flow control is active, so V.24 bits in MSC are not required for data flow control.
+     * @note Even after entering OPEN, any late incoming peer MSC Command shall still be handled and responded.
+     * @note This timeout fallback is a compatibility relaxation, not strict spec compliance.
+     */
+    LogUtilError() << "why peer did not send MSC command to local side?";
+    if( get_port().m_local_modem_status_configed )
+    {
+        transition_to_state( rfcomm_port_state_type::open );
+    }
+}
+
 void rfcomm_port_modem_config_state::cancel_life_timer()
 {
     auto mod = framework_manager::get_instance().get_module_manager().get_module( timer_module::s_timer_module_name );
@@ -705,6 +760,12 @@ void rfcomm_port_modem_config_state::cancel_life_timer()
         timer_module_->undregister_timer( m_modem_config_life_timer_id );
     }
     m_modem_config_life_timer_id = 0;
+
+    if( m_wait_remote_msc_cmd_timer_id != 0 )
+    {
+        timer_module_->undregister_timer( m_wait_remote_msc_cmd_timer_id );
+    }
+    m_wait_remote_msc_cmd_timer_id = 0;
 }
 
 rfcomm_port_sabm_wait_ua_state::~rfcomm_port_sabm_wait_ua_state()

@@ -156,26 +156,29 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
         {
             auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_remove_specific_port>( detail_tsk );
             mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
-            if( !mulx )
+            if( mulx )
+            {
+                mulx->remove_port_connection( rfc_detail_tsk->port, rfc_detail_tsk->local_inited );
+                if( mulx->get_worked_ports_count() == 0u )
+                {
+                    auto mod = framework_manager::get_instance().get_module_manager()
+                        .get_module( timer_module::s_timer_module_name );
+                    auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+                    std::function<void()> _expire_callback = std::bind(
+                        &rfcomm_module::shutdown_mux_l2cap_if_idle, this, mulx );
+                    uint32_t random_delay = framework::get_real_random( 1, 10 );
+                    timer_module_->register_once_timer
+                        (
+                        _expire_callback,
+                        std::chrono::seconds( random_delay ),
+                        "rfc conflicts timer",
+                        rfcomm_module::s_rfcomm_module_name
+                        );
+                }
+            }
+            else
             {
                 LogUtilDebug() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
-            }
-            mulx->remove_port_connection( rfc_detail_tsk->port, rfc_detail_tsk->local_inited );
-            if( mulx->get_worked_ports_count() == 0u )
-            {
-                auto mod = framework_manager::get_instance().get_module_manager()
-                    .get_module( timer_module::s_timer_module_name );
-                auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
-                std::function<void()> _expire_callback = std::bind(
-                    &rfcomm_module::shutdown_mux_l2cap_if_idle, this, mulx );
-                uint32_t random_delay = framework::get_real_random( 1, 10 );
-                timer_module_->register_once_timer
-                    (
-                    _expire_callback,
-                    std::chrono::seconds( random_delay ),
-                    "rfc conflicts timer",
-                    rfcomm_module::s_rfcomm_module_name
-                    );
             }
         }
         break;

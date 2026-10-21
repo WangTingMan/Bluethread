@@ -677,6 +677,10 @@ bool rfcomm_multipexer_connected::handle_event( std::shared_ptr<state_machine::a
     case rfcomm_event_type::start_request:
         connect( rfc_event->m_connect_task );
         break;
+    case rfcomm_event_type::disconnect:
+        get_multipexer().send_disc_frame();
+        transition_to_state( rfcomm_multipexer_state_type::disc_wait_ua );
+        break;
     default:
         LogUtilError() << "event type ignored: " << static_cast< uint32_t >( rfc_event->m_type );
         break;
@@ -829,7 +833,59 @@ bool rfcomm_multipexer_disc_wait_ua::handle_event( uint32_t event, void* p_data 
 
 bool rfcomm_multipexer_disc_wait_ua::handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )
 {
+    std::shared_ptr<rfcomm_multipexer_event> rfc_event;
+    rfc_event = std::static_pointer_cast<rfcomm_multipexer_event>( a_event );
+
+    switch( rfc_event->m_type )
+    {
+    case rfcomm_event_type::multipexer_controlling:
+        handle_multipexer_contolling( rfc_event );
+        break;
+    case rfcomm_event_type::l2cap_connetion_state_changed:
+        switch( rfc_event->m_state )
+        {
+        case l2cap_channel_state_type::close_state:
+            transition_to_state( rfcomm_multipexer_state_type::idle );
+            break;
+        default:
+            LogUtilDebug() << "channel state event ignored.";
+        }
+        break;
+    default:
+        LogUtilError() << "event type ignored: " << static_cast<uint32_t>( rfc_event->m_type );
+        break;
+    }
+
     return true;
+}
+
+void rfcomm_multipexer_disc_wait_ua::handle_multipexer_contolling( std::shared_ptr<rfcomm_multipexer_event> const& a_event )
+{
+    rfcomm_header& header = a_event->m_rfcomm_header;
+    auto frame_type = header.get_frame_type();
+    LogUtilInfo() << "sabm_wait_ua: received controlling frame: " << frame_type;
+
+    bool to_disconnect_l2cap_channel = false;
+    switch( frame_type )
+    {
+    case rfcomm_frame_type::ua:
+        transition_to_state( rfcomm_multipexer_state_type::idle );
+        to_disconnect_l2cap_channel = true;
+        break;
+    case rfcomm_frame_type::dm:
+        // Remote device notify that the connection cannot use any more.
+        transition_to_state( rfcomm_multipexer_state_type::idle );
+        to_disconnect_l2cap_channel = true;
+        break;
+    default:
+        LogUtilError() << "RFC confrolling frame ignored";
+        break;
+    }
+
+    if( to_disconnect_l2cap_channel )
+    {
+        get_multipexer().disconnect_low_channel();
+    }
 }
 
 void rfcomm_multipexer_disc_wait_ua::on_enter()
@@ -1362,6 +1418,17 @@ void rfcomm_multipexer::send_ua_frame()
     tsk->set_target_module( l2cap_module::s_l2cap_module_name );
     tsk->set_position( source_here );
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+}
+
+void rfcomm_multipexer::send_disc_frame()
+{
+    rfcomm_header header_send;
+    header_send.set_dlci( 0 );
+    header_send.set_cr( !m_local_inited );
+    header_send.set_frame_type( rfcomm_frame_type::disc );
+    header_send.set_poll_final( true );
+    header_send.set_sdu_length( 0x00 );
+    send_port_data( header_send, nullptr, 0x00 );
 }
 
 void rfcomm_multipexer::send_multipexer_message( std::shared_ptr<multipexer_message> a_pn )

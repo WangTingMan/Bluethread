@@ -65,6 +65,16 @@ std::ostream& operator<<( std::ostream& a_os, rfcomm_port_state_type a_state )
     return a_os;
 }
 
+void post_remove_port_connection_task( bluetooth_address a_remote_addr, uint8_t a_port, bool a_local_inited )
+{
+    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
+    task->address = a_remote_addr;
+    task->port = a_port;
+    task->local_inited = a_local_inited;
+    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
+    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+}
+
 rfcomm_port_base_state::rfcomm_port_base_state( rfcomm_port_connection& a_sm, rfcomm_port_state_type a_type )
     : state_machine::abstract_state( a_sm, static_cast< uint32_t >( a_type ) )
     , m_rfcomm_port( a_sm )
@@ -278,6 +288,8 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 {
                     get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
+                    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                        get_port().local_inited_port_connection() );
                     LogUtilError() << "reject connection request. due to no callback. state port = "
                         << static_cast< uint32_t >( get_port().get_port() ) << std::boolalpha
                         << get_port().local_inited_port_connection();
@@ -289,6 +301,8 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 {
                     get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
+                    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                        get_port().local_inited_port_connection() );
                     LogUtilError() << "reject connection request. callback: port = " << static_cast< uint32_t >( callback->port_number )
                         << ", is local port = " << std::boolalpha << callback->is_local_port
                         << "; state port = " << static_cast< uint32_t >( get_port().get_port() )
@@ -317,6 +331,8 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                 {
                     get_port().accept_port_connection_request( false );
                     transition_to_state( rfcomm_port_state_type::idle_state );
+                    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                        get_port().local_inited_port_connection() );
                     LogUtilError() << "reject connection request. due to no callback. state port = "
                         << static_cast< uint32_t >( get_port().get_port() ) << std::boolalpha
                         << get_port().local_inited_port_connection();
@@ -335,6 +351,8 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
     case rfcomm_port_event_type::reject_connection_request:
         get_port().accept_port_connection_request( false );
         transition_to_state( rfcomm_port_state_type::idle_state );
+        post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+            get_port().local_inited_port_connection() );
         break;
     default:
         LogUtilError() << "event type not handle: " << static_cast<uint16_t>( event_->m_type );
@@ -475,13 +493,8 @@ void rfcomm_port_wait_pn_rsp_state::handle_life_timeout()
     LogUtilError() << "cannot get PN rsp from remote side.";
     cancel_life_timer();
     get_port().send_dm_frame();
-    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
-    task->address = get_port().m_remote_device;
-    task->port = get_port().get_port();
-    task->local_inited = get_port().local_inited_port_connection();
-    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
-    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
-
+    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+        get_port().local_inited_port_connection() );
     transition_to_state( rfcomm_port_state_type::idle_state );
 }
 
@@ -738,12 +751,8 @@ bool rfcomm_port_sabm_wait_ua_state::handle_event( std::shared_ptr<state_machine
                 {
                     LogUtilDebug() << "remote device response DM with SABM, so we cannot use this port currently";
                     transition_to_state( rfcomm_port_state_type::idle_state );
-                    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
-                    task->address = get_port().m_remote_device;
-                    task->port = get_port().get_port();
-                    task->local_inited = get_port().local_inited_port_connection();
-                    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
-                    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+                    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                        get_port().local_inited_port_connection() );
                 }
                 break;
             default:
@@ -795,12 +804,8 @@ void rfcomm_port_sabm_wait_ua_state::handle_life_timeout()
     LogUtilError() << "cannot get UA frame from remote side.";
     cancel_life_timer();
     get_port().send_dm_frame();
-    auto task = std::make_shared<rfcomm_task_remove_specific_port>();
-    task->address = get_port().m_remote_device;
-    task->port = get_port().get_port();
-    task->local_inited = get_port().local_inited_port_connection();
-    task->set_source_module( rfcomm_module::s_rfcomm_module_name );
-    framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+    post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+        get_port().local_inited_port_connection() );
 
     transition_to_state( rfcomm_port_state_type::idle_state );
 }
@@ -845,6 +850,8 @@ bool rfcomm_port_disc_wait_ua_state::handle_event( std::shared_ptr<state_machine
         {
         case rfcomm_frame_type::ua:
             transition_to_state( rfcomm_port_state_type::idle_state );
+            post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                get_port().local_inited_port_connection() );
             break;
         default:
             LogUtilError() << "Event not handled: " << event_->m_rfcomm_header->get_frame_type();
@@ -915,6 +922,8 @@ bool rfcomm_port_open_state::handle_event( std::shared_ptr<state_machine::abstra
                 header_send.set_sdu_length( 0x00 );
                 get_port().m_port_sender( header_send, nullptr, 0x00 );
                 transition_to_state( rfcomm_port_state_type::idle_state );
+                post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                    get_port().local_inited_port_connection() );
                 break;
             default:
                 LogUtilError() << "rfcomm controlling frame ignored: " << header->get_frame_type();

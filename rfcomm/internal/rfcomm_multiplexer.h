@@ -52,6 +52,7 @@ enum class rfcomm_event_type : uint8_t
                                    // m_rfcomm_header and m_hci_data is valid
     l2cap_connetion_state_changed = 0x03, // received rfcomm l2cap channel connection state changed event from l2cap layer
                                    // valid members: m_address, m_local_cid, m_remote_cid, m_state
+    disconnect = 0x04
 };
 
 std::ostream& operator<<( std::ostream& a_os, rfcomm_event_type a_state );
@@ -267,6 +268,8 @@ public:
 
 protected:
 
+    void handle_multipexer_contolling( std::shared_ptr<rfcomm_multipexer_event> const& a_event );
+
     void on_enter()override;
 
     void on_exit()override;
@@ -374,6 +377,11 @@ public:
         return m_pending_outgoing_connect_request;
     }
 
+    uint16_t get_worked_ports_count()const
+    {
+        return m_worked_ports.size();
+    }
+
 private:
 
     bool packet_valid
@@ -413,6 +421,8 @@ private:
     void send_sabm_frame();
 
     void send_ua_frame();
+
+    void send_disc_frame();
 
     void send_multipexer_message( std::shared_ptr<multipexer_message> a_pn );
 

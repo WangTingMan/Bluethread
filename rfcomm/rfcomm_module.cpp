@@ -156,13 +156,26 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
         {
             auto rfc_detail_tsk = std::static_pointer_cast<rfcomm_task_remove_specific_port>( detail_tsk );
             mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
-            if( mulx )
+            if( !mulx )
             {
-                mulx->remove_port_connection( rfc_detail_tsk->port, rfc_detail_tsk->local_inited );
+                LogUtilDebug() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
             }
-            else
+            mulx->remove_port_connection( rfc_detail_tsk->port, rfc_detail_tsk->local_inited );
+            if( mulx->get_worked_ports_count() == 0u )
             {
-                LogUtilError() << "No multipexer for address: " << rfc_detail_tsk->address.to_string();
+                auto mod = framework_manager::get_instance().get_module_manager()
+                    .get_module( timer_module::s_timer_module_name );
+                auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+                std::function<void()> _expire_callback = std::bind(
+                    &rfcomm_module::shutdown_mux_l2cap_if_idle, this, mulx );
+                uint32_t random_delay = framework::get_real_random( 1, 10 );
+                timer_module_->register_once_timer
+                    (
+                    _expire_callback,
+                    std::chrono::seconds( random_delay ),
+                    "rfc conflicts timer",
+                    rfcomm_module::s_rfcomm_module_name
+                    );
             }
         }
         break;
@@ -543,6 +556,37 @@ void rfcomm_module::check_connection_conflict
     for( auto& tsk : a_pending_tsk )
     {
         connect_specific_port( tsk );
+    }
+}
+
+void rfcomm_module::shutdown_mux_l2cap_if_idle( std::shared_ptr<rfcomm_multipexer> a_mulx )
+{
+    if( a_mulx->get_worked_ports_count() > 0 )
+    {
+        return;
+    }
+
+    bool found = false;
+    for( auto& ele : m_working_multipexer )
+    {
+        if( ele.get() == a_mulx.get() )
+        {
+            found = true;
+            break;
+        }
+    }
+
+    if( !found )
+    {
+        return;
+    }
+
+    if( a_mulx->get_current_state_id() == (int)rfcomm_multipexer_state_type::connected )
+    {
+        LogUtilDebug() << "going to drop this multipexer connection";
+        auto event_ = std::make_shared<rfcomm_multipexer_event>();
+        event_->m_type = rfcomm_event_type::disconnect;
+        a_mulx->handle_event( event_ );
     }
 }
 

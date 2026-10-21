@@ -85,6 +85,8 @@ private:
         bluetooth_address a_remote_addr
         );
 
+    void shutdown_mux_l2cap_if_idle( std::shared_ptr<rfcomm_multipexer> a_mulx );
+
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
         (
         uint16_t a_acl_handle

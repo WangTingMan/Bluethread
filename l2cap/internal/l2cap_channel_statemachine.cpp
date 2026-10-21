@@ -1290,6 +1290,9 @@ bool l2cap_channel_wait_disconnect_state::handle_event( std::shared_ptr<state_ma
 
     switch( event_->m_type )
     {
+    case l2cap_channel_event::event_type::close_channel_request:
+        /* do nothing, we already wait for disconnect response */
+        break;
     default:
         LogUtilError() << "Not handle event type: " << static_cast<uint32_t>( event_->m_type );
     }

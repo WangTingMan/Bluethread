@@ -17,6 +17,7 @@
 #include "sdp_connection.h"
 #include "sdp_manager.h"
 #include "sdp/sdp_module.h"
+#include "l2cap/l2cap_task.h"
 
 #include <framework/framework_manager.h>
 #include <framework/log_util.h>
@@ -49,6 +50,12 @@ bool exact_pointer_from_continuation( std::vector<uint8_t>const& a_continue_buff
 
     std::memcpy( &a_pointer, a_continue_buffer.data(), sizeof( uintptr_t ) );
     return true;
+}
+
+sdp_connection::sdp_connection( sdp_manager* a_sdp_manager )
+    : m_sdp_manager( a_sdp_manager )
+{
+    m_last_sdp_message_process_time_ms = framework::timer_module::get_system_booting_time();
 }
 
 sdp_connection::~sdp_connection()
@@ -116,6 +123,11 @@ bool sdp_connection::set_connection_status( connection_status a_connection_statu
     return ret;
 }
 
+void sdp_connection::update_last_sdp_message_process_time()
+{
+    m_last_sdp_message_process_time_ms = framework::timer_module::get_system_booting_time();
+}
+
 void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search )
 {
     if( m_connection_status != connection_status::connected ||
@@ -126,6 +138,8 @@ void sdp_connection::search_service( std::shared_ptr<sdp_task_service_search_req
         m_pending_tasks.push_back( sdp_tsk );
         return;
     }
+
+    update_last_sdp_message_process_time();
 
     std::shared_ptr<sdp_service_search_request> request;
     request = std::make_shared<sdp_service_search_request>();
@@ -148,6 +162,8 @@ void sdp_connection::search_service_attribute( std::shared_ptr<sdp_task_service_
         m_pending_tasks.push_back( sdp_tsk );
         return;
     }
+
+    update_last_sdp_message_process_time();
 
     std::shared_ptr<sdp_service_search_attribute_req> request;
     request = std::make_shared<sdp_service_search_attribute_req>();
@@ -173,6 +189,8 @@ void sdp_connection::search_service_by_handle( uint32_t a_handle )
         m_pending_tasks.push_back( sdp_tsk );
         return;
     }
+
+    update_last_sdp_message_process_time();
 
     std::shared_ptr<sdp_service_attribute_request> request;
     request = std::make_shared<sdp_service_attribute_request>();
@@ -690,12 +708,31 @@ void sdp_connection::handle_sdp_service_attribute_response
     process_next_pending_request();
 }
 
+void sdp_connection::sdp_channel_idle_check()
+{
+    auto now_ = framework::timer_module::get_system_booting_time();
+    if( now_ - m_last_sdp_message_process_time_ms > 2000 )
+    {
+        LogUtilDebug() << "drop this sdp connection since idle for long time";
+        auto task = std::make_shared<l2cap_task_disconnect_channel_request>();
+        task->m_remote_address = m_address;
+        task->m_local_cid = m_local_cid;
+        task->m_acl_handle = m_acl_handle;
+        task->set_source_module( sdp_module::s_sdp_module_name );
+
+        framework::framework_manager::get_instance().get_thread_manager()
+            .post_task( task, framework::source_here );
+    }
+}
+
 void sdp_connection::process_next_pending_request()
 {
     if( m_pending_tasks.empty() )
     {
         return;
     }
+
+    update_last_sdp_message_process_time();
 
     auto first_pending = m_pending_tasks.front();
     m_pending_tasks.erase( m_pending_tasks.begin() );

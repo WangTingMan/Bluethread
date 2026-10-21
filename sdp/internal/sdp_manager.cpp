@@ -64,6 +64,8 @@ void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request
 
     if( !already_connected )
     {
+        LogUtilDebug() << "received sdp connection request from device "
+            << address.to_string();
         std::shared_ptr<l2cap_task_accept_channle_connection_req> acp_con_task;
         acp_con_task = std::make_shared<l2cap_task_accept_channle_connection_req>();
         acp_con_task->set_source_module( sdp_module::s_sdp_module_name );
@@ -78,8 +80,10 @@ void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request
             sdp_conn->set_connection_status( connection_status::connecting );
             sdp_conn->set_acl_handle( a_request->m_acl_handle );
             m_connections.push_back( sdp_conn );
+            set_sdp_channel_idle_check_timer( true );
             conn_ = sdp_conn;
         }
+        conn_->set_is_local_sdp_initiator( false );
 
         framework_manager::get_instance().get_thread_manager().post_task( acp_con_task, framework::source_here );
 
@@ -91,7 +95,6 @@ void sdp_manager::handle_sdp_connect_request( std::shared_ptr<connection_request
     }
     else
     {
-
         std::shared_ptr<l2cap_task_reject_channle_connection_req> task;
         task = std::make_shared<l2cap_task_reject_channle_connection_req>();
         task->set_source_module( sdp_module::s_sdp_module_name );
@@ -135,6 +138,7 @@ void sdp_manager::handle_config_request( std::shared_ptr<l2cap_config_request> c
         sdp_conn->set_connection_status( connection_status::connecting );
         sdp_conn->set_acl_handle( a_request->m_acl_handle );
         m_connections.push_back( sdp_conn );
+        set_sdp_channel_idle_check_timer();
         conn_ = sdp_conn;
     }
 
@@ -206,6 +210,7 @@ void sdp_manager::handle_connection_state_changed
                 sdp_connection_->set_acl_handle( acl_handle );
                 sdp_connection_->set_local_cid( a_local_cid );
                 m_connections.push_back( sdp_connection_ );
+                set_sdp_channel_idle_check_timer();
             }
             else
             {
@@ -308,6 +313,8 @@ void sdp_manager::handle_sdu( std::shared_ptr<hci_data> a_sdu )
         return;
     }
 
+    sdp_con->update_last_sdp_message_process_time();
+
     if( !verify_received_packet( _sdp_header, a_sdu ) )
     {
         send_error_rsp( _l2cap_header.get_acl_handle(), sdp_error_code::invalid_syntax );
@@ -403,7 +410,9 @@ void sdp_manager::service_search( std::shared_ptr<sdp_task> const& a_task )
         sdp_conn->m_address = detail_tsk->m_remote_device;
         sdp_conn->set_connection_status( connection_status::connecting );
         m_connections.push_back( sdp_conn );
+        set_sdp_channel_idle_check_timer();
         con = sdp_conn;
+        sdp_conn->set_is_local_sdp_initiator();
     }
 
     con->search_service( detail_tsk );
@@ -447,7 +456,9 @@ void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& 
         sdp_conn->m_address = detail_tsk->m_remote_device;
         sdp_conn->set_connection_status( connection_status::connecting );
         m_connections.push_back( sdp_conn );
+        set_sdp_channel_idle_check_timer();
         conn_ = sdp_conn;
+        sdp_conn->set_is_local_sdp_initiator();
     }
     conn_->search_service_attribute( detail_tsk );
 }
@@ -789,6 +800,11 @@ void sdp_manager::remove_connection( bluetooth_address const& a_address )
             break;
         }
     }
+
+    if( m_connections.empty() )
+    {
+        set_sdp_channel_idle_check_timer( false );
+    }
 }
 
 void sdp_manager::handle_connection_status_monitor_timeout( sdp_connection* a_connection )
@@ -807,6 +823,11 @@ void sdp_manager::handle_connection_status_monitor_timeout( sdp_connection* a_co
     if( sdp_con )
     {
         sdp_con->clear_due_to_connection_timeout();
+    }
+
+    if( m_connections.empty() )
+    {
+        set_sdp_channel_idle_check_timer( false );
     }
 }
 
@@ -1404,6 +1425,64 @@ std::shared_ptr<sdp_service_search_attribute_response> sdp_manager::parse_servic
     response->m_remote_device = alternative_result->m_remote_device;
 
     return response;
+}
+
+void sdp_manager::set_sdp_channel_idle_check_timer( bool a_enable )
+{
+    if( a_enable )
+    {
+        if( m_dp_idle_monitor_timer_id != 0 )
+        {
+            return;
+        }
+
+        auto mod = framework_manager::get_instance().get_module_manager()
+            .get_module( timer_module::s_timer_module_name );
+        auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+        std::function<void( uint32_t, std::string )> _expire_callback = std::bind(
+            &sdp_manager::sdp_channel_idle_check, this, std::placeholders::_1, std::placeholders::_2 );
+
+        m_dp_idle_monitor_timer_id = timer_module_->register_timer
+            (
+            _expire_callback,
+            std::chrono::seconds( 2 ),
+            0,
+            sdp_module::s_sdp_module_name
+            );
+        LogUtilDebug() << "register idle monitor timer, id = " << m_dp_idle_monitor_timer_id;
+    }
+    else
+    {
+        if( m_dp_idle_monitor_timer_id == 0 )
+        {
+            return;
+        }
+
+        auto mod = framework_manager::get_instance().get_module_manager()
+            .get_module( timer_module::s_timer_module_name );
+        auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+        timer_module_->undregister_timer( m_dp_idle_monitor_timer_id );
+        m_dp_idle_monitor_timer_id = 0;
+        LogUtilDebug() << "cancel idle monitor timer";
+    }
+}
+
+void sdp_manager::sdp_channel_idle_check( uint32_t a_timer_id, std::string a_name )
+{
+    for( auto& con : m_connections )
+    {
+        con->sdp_channel_idle_check();
+    }
+
+    if( m_connections.empty() )
+    {
+        auto mod = framework_manager::get_instance().get_module_manager()
+            .get_module( timer_module::s_timer_module_name );
+        auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+        timer_module_->undregister_timer( m_dp_idle_monitor_timer_id );
+        m_dp_idle_monitor_timer_id = 0;
+        LogUtilDebug() << "cancel idle monitor timer";
+    }
 }
 
 }

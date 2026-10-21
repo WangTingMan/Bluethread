@@ -77,11 +77,7 @@ class sdp_connection
 
 public:
 
-    sdp_connection( sdp_manager* a_sdp_manager )
-        : m_sdp_manager( a_sdp_manager )
-    {
-
-    }
+    sdp_connection( sdp_manager* a_sdp_manager );
 
     ~sdp_connection();
 
@@ -178,6 +174,21 @@ public:
         return ( m_acl_handle == a_acl_handle );
     }
 
+    /**
+     * @brief Set initiator flag of SDP L2CAP connection
+     * @param value true if local device initiates this SDP L2CAP connection.
+     */
+    void set_is_local_sdp_initiator( bool value = true )
+    {
+        m_is_local_sdp_initiator = value;
+    }
+
+    /**
+     * @brief Update m_last_sdp_message_process_time_us to current system timestamp.
+     * Call this after finishing processing an incoming SDP message on this SDP channel.
+     */
+    void update_last_sdp_message_process_time();
+
     void search_service( std::shared_ptr<sdp_task_service_search_request> a_service_search );
 
     void search_service_attribute( std::shared_ptr<sdp_task_service_search_attribute> a_service_search );
@@ -229,6 +240,13 @@ public:
         sdp_header& _sdp_header,
         std::shared_ptr<sdp_service_attribute_response> const& a_response
         );
+
+    /**
+     * @brief Periodic idle check handler for SDP channel, triggered every 2 seconds.
+     * Compare current timestamp with m_last_sdp_message_process_time_us.
+     * If idle time exceeds threshold, close SDP L2CAP connection.
+     */
+    void sdp_channel_idle_check();
 
 public:
 
@@ -283,8 +301,19 @@ private:
 
     void process_pending_sdp_task( std::shared_ptr<sdp_task_pending> a_pending_tsk );
 
+    /**
+     * @brief Whether this SDP L2CAP connection is initiated by local device.
+     * true: local sends L2CAP connect request to establish SDP channel.
+     * false: remote peer initiates the L2CAP connection for SDP.
+     */
+    bool m_is_local_sdp_initiator = true;
     connection_status m_connection_status = connection_status::disconnected;
     int64_t m_connection_status_changed_time = 0;
+    /**
+     * @brief Timestamp of last processed SDP message on this SDP channel.
+     * Unit: millisecond. Used for idle timeout detection of SDP connection.
+     */
+    uint64_t m_last_sdp_message_process_time_ms;
     uint32_t m_connection_status_watch_timer = 0;
 
     uint16_t m_next_transaction_id = 0;

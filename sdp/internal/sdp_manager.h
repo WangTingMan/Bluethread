@@ -151,9 +151,20 @@ private:
         uint16_t a_parameter_size
         );
 
+    /**
+     * @brief Enable or disable periodic SDP channel idle check timer.
+     * @param enable true: start the idle check timer if it is not already running.
+     * @param enable false: cancel/destroy the idle check timer if it exists.
+     * The timer period is 2s, executes handle_sdp_channel_idle_check as callback.
+     */
+    void set_sdp_channel_idle_check_timer( bool enable = true );
+
+    void sdp_channel_idle_check( uint32_t a_timer_id, std::string a_name );
+
     sdp_server m_local_service;
     std::vector<std::shared_ptr<sdp_connection>> m_connections;
     std::vector<std::shared_ptr<sdp_protocol_base>> m_pending_reqs;
+    uint32_t m_dp_idle_monitor_timer_id = 0;
 
 };
 

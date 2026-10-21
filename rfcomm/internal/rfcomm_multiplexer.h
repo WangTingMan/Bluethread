@@ -363,6 +363,17 @@ public:
 
     void remove_port_connection( uint8_t a_port, bool a_local_inited );
 
+    rfcomm_multipexer_state_type get_multipexer_state()const
+    {
+        int state = get_current_state_id();
+        return rfcomm_multipexer_state_type( state );
+    }
+
+    std::vector<std::shared_ptr<rfcomm_task_connect_port>> get_all_pending_connection_task()
+    {
+        return m_pending_outgoing_connect_request;
+    }
+
 private:
 
     bool packet_valid

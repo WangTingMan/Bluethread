@@ -79,6 +79,12 @@ private:
 
     void do_port_callback_operation( std::shared_ptr<rfcomm_task_port_callback_operation> a_task );
 
+    void check_connection_conflict
+        (
+        std::vector<std::shared_ptr<rfcomm_task_connect_port>> a_pending_tsk,
+        bluetooth_address a_remote_addr
+        );
+
     std::shared_ptr<rfcomm_multipexer> find_multipexer_by_acl_handle
         (
         uint16_t a_acl_handle

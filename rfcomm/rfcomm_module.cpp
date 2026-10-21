@@ -19,6 +19,7 @@
 #include "framework/log_util.h"
 #include "framework/framework_event.h"
 #include "framework/framework_manager.h"
+#include "framework/utils.h"
 
 #include "../l2cap/l2cap_module.h"
 #include "../l2cap/l2cap_common.h"
@@ -246,14 +247,37 @@ void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> 
     std::shared_ptr<rfcomm_multipexer> mulx = find_multipexer_by_acl_handle( a_request->m_acl_handle );
     if( mulx )
     {
+        auto current_state = mulx->get_multipexer_state();
         LogUtilInfo() << "We already have a rfcomm multupexer for remote device: " << address.to_string()
-            << ", reject for this one.";
+            << ", state: " << current_state << ", reject for this one.";
         std::shared_ptr<l2cap_task_reject_channle_connection_req> task;
         task = std::make_shared<l2cap_task_reject_channle_connection_req>();
         task->set_source_module( get_name() );
         task->m_connect_request = a_request;
         task->m_reject_reason = connection_req_result::connection_refused_no_resource;
         framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+
+        if( rfcomm_multipexer_state_type::wait_conn_cnf == current_state )
+        {
+            LogUtilDebug() << "The establishment of the underlying L2CAP channel for RFCOMM may"
+                " encounter conflicts, which we need to handle.";
+            auto pending_tsks = mulx->get_all_pending_connection_task();
+
+            uint32_t life_timer_id = 0;
+            auto mod = framework_manager::get_instance().get_module_manager().get_module
+                ( timer_module::s_timer_module_name );
+            auto timer_module_ = std::static_pointer_cast<timer_module>( mod );
+            uint32_t random_delay = framework::get_real_random( 2, 20 );
+            std::function<void()> _expire_callback = std::bind(
+                &rfcomm_module::check_connection_conflict, this, pending_tsks, address );
+            life_timer_id = timer_module_->register_once_timer
+                (
+                _expire_callback,
+                std::chrono::milliseconds( random_delay ),
+                "rfc conflicts timer",
+                rfcomm_module::s_rfcomm_module_name
+                );
+        }
         return;
     }
 
@@ -499,6 +523,26 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
                 return;
             }
         }
+    }
+}
+
+void rfcomm_module::check_connection_conflict
+    (
+    std::vector<std::shared_ptr<rfcomm_task_connect_port>> a_pending_tsk,
+    bluetooth_address a_remote_addr
+    )
+{
+    auto mulx = find_multipexer_by_remote( a_remote_addr );
+    if( mulx )
+    {
+        LogUtilDebug() << "already have a rfcomm multipexser, nothing work to do to fix connection conflict";
+        return;
+    }
+
+    LogUtilDebug() << "let's fix the connection conflict now";
+    for( auto& tsk : a_pending_tsk )
+    {
+        connect_specific_port( tsk );
     }
 }
 

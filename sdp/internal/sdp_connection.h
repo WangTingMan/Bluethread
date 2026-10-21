@@ -184,6 +184,8 @@ public:
 
     void search_service_by_handle( uint32_t a_handle );
 
+    void clear_due_to_connection_timeout();
+
 public:
 
     void handle_error_rsp

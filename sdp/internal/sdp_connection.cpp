@@ -186,6 +186,47 @@ void sdp_connection::search_service_by_handle( uint32_t a_handle )
     m_sdp_manager->send_packet( request, m_address );
 }
 
+void sdp_connection::clear_due_to_connection_timeout()
+{
+    for( auto& tsk : m_pending_tasks )
+    {
+        switch( tsk->m_pending_type )
+        {
+        case pending_type::sdp_task_pending_type:
+            {
+                auto detail_tsk = std::static_pointer_cast<sdp_task_pending>( tsk );
+                std::shared_ptr<sdp_task>& _pending_request = detail_tsk->m_pending_request;
+                switch( _pending_request->m_type )
+                {
+                case sdp_task_type::service_search_attribute:
+                    {
+                        auto sdp_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>( _pending_request );
+                        if( !sdp_tsk )
+                        {
+                            break;
+                        }
+
+                        if( sdp_tsk->m_searching_result_callback )
+                        {
+                            sdp_tsk->m_searching_result_callback( {}, sdp_search_result::sdp_search_failed );
+                        }
+
+                        LogUtilError() << "task canceled due to connection timeout for task from: "
+                            << sdp_tsk->get_position();
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        break;
+        default:
+            LogUtilDebug() << "pending task ignored due to connection timeout";
+            break;
+        }
+    }
+}
+
 void sdp_connection::handle_error_rsp
     (
     sdp_header& _sdp_header,

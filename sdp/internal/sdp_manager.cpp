@@ -215,6 +215,8 @@ void sdp_manager::handle_connection_state_changed
         }
         else
         {
+            LogUtilError() << "error. cannot find out local sdp connection block to"
+                " handle this connection status changed event";
             return;
         }
     }
@@ -409,6 +411,7 @@ void sdp_manager::service_search( std::shared_ptr<sdp_task> const& a_task )
 
 void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& a_task )
 {
+    LogUtilDebug() << "execute service search attribute task";
     auto detail_tsk = std::static_pointer_cast<sdp_task_service_search_attribute>( a_task );
 
     if( detail_tsk->m_service_uuid.empty() )
@@ -429,6 +432,8 @@ void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& 
     auto conn_ = find_connection( detail_tsk->m_remote_device );
     if( !conn_ )
     {
+        LogUtilDebug() << "there is no sdp connection for device " << detail_tsk->m_remote_device.to_string()
+            << ", so we need ask L2CAP module to make one";
         std::shared_ptr<l2cap_task_connection_request> tsk;
         tsk = std::make_shared<l2cap_task_connection_request>();
         tsk->m_remote_device = detail_tsk->m_remote_device;
@@ -774,6 +779,8 @@ std::shared_ptr<sdp_connection> sdp_manager::find_connection
 
 void sdp_manager::remove_connection( bluetooth_address const& a_address )
 {
+    LogUtilDebug() << "remove sdp connection block for remote " << a_address.to_string();
+
     for( auto it = m_connections.begin(); it != m_connections.end(); ++it )
     {
         if( ( *it )->m_address == a_address )
@@ -786,14 +793,20 @@ void sdp_manager::remove_connection( bluetooth_address const& a_address )
 
 void sdp_manager::handle_connection_status_monitor_timeout( sdp_connection* a_connection )
 {
+    std::shared_ptr<sdp_connection> sdp_con;
     for( auto it = m_connections.begin(); it != m_connections.end(); ++it )
     {
-        auto& _con = *it;
-        if( _con.get() == a_connection )
+        sdp_con = *it;
+        if( sdp_con.get() == a_connection )
         {
             m_connections.erase( it );
             break;
         }
+    }
+
+    if( sdp_con )
+    {
+        sdp_con->clear_due_to_connection_timeout();
     }
 }
 

@@ -423,6 +423,7 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
         /**
          * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
          */
+        LogUtilDebug() << "failed: empty service record";
         handle_spp_connection_failed( spp_conn );
         return;
     }
@@ -435,6 +436,7 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
         /**
          * RFCOMM port connect failed since cannot found such port from remote deivce by specificed uuids.
          */
+        LogUtilDebug() << "failed: service record not matched";
         handle_spp_connection_failed( spp_conn );
         return;
     }
@@ -443,6 +445,7 @@ void spp_module::handle_spp_sdp_service_attribute_search_result
     spp_attris = parse_spp_sdp_attrubutes( service_records );
     if( !spp_attris.is_valid )
     {
+        LogUtilDebug() << "failed: cannot read the rfcomm port from this service record";
         handle_spp_connection_failed( spp_conn );
         return;
     }

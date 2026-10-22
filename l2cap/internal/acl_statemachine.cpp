@@ -536,6 +536,20 @@ namespace bluetooth
         }
     }
 
+    void acl_statemachine::remove_channel_from_cache( l2cap_channel_statemachine* a_l2cap_ch_sm, bool& found )
+    {
+        for( auto it = m_channel_machines.begin(); it != m_channel_machines.end(); ++it )
+        {
+            if( ( *it ).get() == a_l2cap_ch_sm )
+            {
+                LogUtilInfo() << "Remove channel state machine";
+                m_channel_machines.erase( it );
+                found = true;
+                return;
+            }
+        }
+    }
+
     void acl_statemachine::connection_state_endtered()
     {
         m_signaling_channel->set_sig_pkt_handler( std::bind( &acl_statemachine::handle_signaling_pkt,

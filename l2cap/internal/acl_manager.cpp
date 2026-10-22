@@ -540,6 +540,21 @@ void acl_manager::remove_channel_from_cache( std::shared_ptr<l2cap_task> a_tsk )
     }
 }
 
+void acl_manager::remove_channel_from_cache_by_pointer( std::shared_ptr<l2cap_task> a_tsk )
+{
+    auto detail_task = std::static_pointer_cast<l2cap_task_remove_channel_from_cache_by_pointer>( a_tsk );
+    l2cap_channel_statemachine* l2cap_ch_sm = detail_task->m_channel_sm;
+    bool found = false;
+    for( auto& acl : m_acl_state_machines )
+    {
+        acl->remove_channel_from_cache( l2cap_ch_sm, found );
+        if( found )
+        {
+            break;
+        }
+    }
+}
+
 void acl_manager::initialize_channel_machine( std::shared_ptr<l2cap_channel_statemachine> const& a_channel )
 {
     a_channel->start();

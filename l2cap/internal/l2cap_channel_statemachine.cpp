@@ -125,10 +125,38 @@ void l2cap_channel_close_state::on_enter()
         tsk->set_source_module( l2cap_module::s_l2cap_module_name );
         framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
     }
+
+    cancel_life_timer();
+
+    auto mod = framework_manager::get_instance().get_module_manager().get_module
+        ( timer_module::s_timer_module_name );
+    auto timer_mod = std::static_pointer_cast<timer_module>( mod );
+    auto upper_thiz = get_statemachine().find_state( get_id() );
+    auto detail_thiz = std::static_pointer_cast<l2cap_channel_close_state>( upper_thiz );
+    std::weak_ptr<l2cap_channel_close_state> weak_thiz = detail_thiz;
+    if( detail_thiz )
+    {
+        std::function<void()> fun;
+        fun = [weak_thiz]()
+            {
+                LogUtilDebug() << "life out!";
+                auto shared_thiz = weak_thiz.lock();
+                if( !shared_thiz )
+                {
+                    LogUtilDebug() << "maybe already released, ignore this timeout";
+                    return;
+                }
+
+                shared_thiz->handle_life_timer_out();
+            };
+        m_close_state_life_timer_id = timer_mod->register_once_timer( fun,
+            std::chrono::seconds( 40 ), "", l2cap_module::s_l2cap_module_name );
+    }
 }
 
 void l2cap_channel_close_state::on_exit()
 {
+    cancel_life_timer();
 }
 
 bool l2cap_channel_close_state::handle_event
@@ -173,7 +201,7 @@ bool l2cap_channel_close_state::handle_event
         }
         break;
     case l2cap_channel_event::event_type::accept_connection_request:
-        accept_connection_request( event_ );
+        do_accept_connection_request( event_ );
         break;
     case l2cap_channel_event::event_type::open_channel_request:
         send_connection_request_to_remote();
@@ -269,7 +297,7 @@ void l2cap_channel_close_state::handle_signaling_request( std::shared_ptr<l2cap_
         );
 }
 
-void l2cap_channel_close_state::accept_connection_request
+void l2cap_channel_close_state::do_accept_connection_request
     (
     std::shared_ptr<l2cap_channel_event> const& a_event
     )
@@ -304,6 +332,49 @@ void l2cap_channel_close_state::send_connection_request_to_remote()
         << ", local channel id: " << get_statemachine().m_local_channel_id;
 
     transition_to_state( l2cap_channel_state_type::wait_connect_rsp );
+}
+
+void l2cap_channel_close_state::handle_life_timer_out()
+{
+
+    uint16_t _acl_handle = get_statemachine().m_signaling_channel->get_acl_handle();
+    uint16_t _local_cid = get_statemachine().m_local_channel_id;
+
+    if( _acl_handle != 0 && _local_cid != 0 )
+    {
+        std::shared_ptr<l2cap_task_remove_channel_from_cache> tsk;
+        tsk = std::make_shared<l2cap_task_remove_channel_from_cache>();
+        tsk->m_acl_handle = _acl_handle;
+        tsk->m_local_cid = _local_cid;
+        tsk->m_acl_type = get_statemachine().m_signaling_channel->get_acl_type();
+        tsk->set_source_module( l2cap_module::s_l2cap_module_name );
+        framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+        return;
+    }
+
+    /**
+     * @brief Schedule a task to delete L2CAP channel state machine.
+     * The state machine has stayed in close state longer than the configured threshold.
+     */
+    std::shared_ptr<l2cap_task_remove_channel_from_cache_by_pointer> tsk;
+    tsk = std::make_shared<l2cap_task_remove_channel_from_cache_by_pointer>();
+    tsk->m_channel_sm = &get_statemachine();
+    tsk->set_source_module( l2cap_module::s_l2cap_module_name );
+    framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+}
+
+void l2cap_channel_close_state::cancel_life_timer()
+{
+    if( m_close_state_life_timer_id == 0 )
+    {
+        return;
+    }
+
+    auto mod = framework_manager::get_instance().get_module_manager().get_module
+        ( timer_module::s_timer_module_name );
+    auto timer_mod = std::static_pointer_cast<timer_module>( mod );
+    timer_mod->undregister_timer( m_close_state_life_timer_id );
+    m_close_state_life_timer_id = 0;
 }
 
 l2cap_channel_wait_connect_state::l2cap_channel_wait_connect_state

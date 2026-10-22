@@ -22,6 +22,8 @@
 namespace bluetooth
 {
 
+    class l2cap_channel_statemachine;
+
     class l2cap_task_remote_invalid_cid_channel_close : public l2cap_task
     {
 
@@ -78,5 +80,22 @@ namespace bluetooth
         uint16_t    m_local_cid = 0x00;
         uint16_t    m_acl_handle = 0x00;
         acl_type    m_acl_type = acl_type::invalid_type;
+    };
+
+    /**
+    * @class l2cap_task_remove_channel_from_cache
+    */
+    class l2cap_task_remove_channel_from_cache_by_pointer : public l2cap_task
+    {
+
+    public:
+
+        l2cap_task_remove_channel_from_cache_by_pointer()
+        {
+            m_type = l2cap_task_type::remove_channel_from_ch_cache_by_pointer;
+            set_source_module( l2cap_module::s_l2cap_module_name );
+        }
+
+        l2cap_channel_statemachine* m_channel_sm = nullptr;
     };
 }

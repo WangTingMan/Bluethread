@@ -214,6 +214,8 @@ public:
 
     void remove_channel_from_cache( uint16_t a_local_cid );
 
+    void remove_channel_from_cache( l2cap_channel_statemachine* a_l2cap_ch_sm, bool& found );
+
 private:
 
     void set_handle( uint16_t a_handle )

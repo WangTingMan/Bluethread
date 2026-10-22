@@ -154,6 +154,8 @@ public:
 
     void remove_channel_from_cache( std::shared_ptr<l2cap_task> a_tsk );
 
+    void remove_channel_from_cache_by_pointer( std::shared_ptr<l2cap_task> a_tsk );
+
 private:
 
     bool l2cap_size_check( std::shared_ptr<hci_data> const& a_hci_data );

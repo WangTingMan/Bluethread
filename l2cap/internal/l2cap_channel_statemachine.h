@@ -78,6 +78,11 @@ public:
 
     l2cap_channel_close_state( l2cap_channel_statemachine& a_sm, uint32_t a_state_id );
 
+    ~l2cap_channel_close_state()
+    {
+        cancel_life_timer();
+    }
+
     bool handle_event( uint32_t event, void* p_data )override;
 
     bool handle_event( std::shared_ptr<state_machine::abstract_event> const& a_event )override;
@@ -92,9 +97,17 @@ public:
 
     void handle_signaling_request( std::shared_ptr<l2cap_disconnect_request> a_requst );
 
-    void accept_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event );
+    void do_accept_connection_request( std::shared_ptr<l2cap_channel_event> const& a_event );
 
     void send_connection_request_to_remote();
+
+private:
+
+    void handle_life_timer_out();
+
+    void cancel_life_timer();
+
+    uint32_t m_close_state_life_timer_id = 0;
 };
 
 class l2cap_channel_wait_connect_state : public l2cap_channel_base_state

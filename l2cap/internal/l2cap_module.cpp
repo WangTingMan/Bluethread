@@ -160,6 +160,9 @@ void l2cap_module::handle_task( std::shared_ptr<abstract_task> a_task )
         case l2cap_task_type::remove_channel_from_ch_cache:
             m_connection_manager->remove_channel_from_cache( detail_tsk );
             break;
+        case l2cap_task_type::remove_channel_from_ch_cache_by_pointer:
+            m_connection_manager->remove_channel_from_cache_by_pointer( detail_tsk );
+            break;
         default:
             LogUtilError() << "type ignored." << static_cast< uint16_t >( detail_tsk->m_type );
             break;

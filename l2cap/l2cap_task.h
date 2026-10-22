@@ -44,7 +44,7 @@ namespace bluetooth
         remote_invalid_cid_channel_close = 0x0B, /* Remote rejected command with INVALID_CID, trigger local channel close */
         clear_pending_packets           = 0x0C, /* Clear all pending packets in the channel's pending queue */
         disconnect_channel_request      = 0x0D, /* Request l2cap module to disconnect a channel with local cid */
-        remove_channel_from_cache       = 0x0E, /* Remove the channel from l2cap module's channel cache */
+        remove_channel_from_ch_cache    = 0x0E, /* Remove the channel from l2cap module's channel cache */
     };
 
     class l2cap_task : public framework::abstract_task

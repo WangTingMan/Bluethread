@@ -255,6 +255,8 @@ private:
      */
     void handle_connect_response(std::shared_ptr<l2cap_connect_response> const& a_request);
 
+    void handle_disconnect_response( std::shared_ptr<l2cap_disconnect_response> a_response );
+
     std::shared_ptr<l2cap_channel_statemachine> find_channel_state_machine
         (
         uint16_t a_acl_handle,

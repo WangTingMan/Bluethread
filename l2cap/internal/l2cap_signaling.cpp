@@ -1619,8 +1619,8 @@ uint16_t l2cap_signaling::handle_disconnect_response
         size_parsed = a_size;
         return size_parsed;
     }
-    uint16_t source_cid = le_to_host16( a_raw_sig + 4 );
-    uint16_t dest_cid = le_to_host16( a_raw_sig + 6 );
+    uint16_t dest_cid = le_to_host16( a_raw_sig + 4 );
+    uint16_t source_cid = le_to_host16( a_raw_sig + 6 );
     size_left -= 4u;
     size_parsed += 4u;
 

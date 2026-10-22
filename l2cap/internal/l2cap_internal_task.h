@@ -71,7 +71,7 @@ namespace bluetooth
 
         l2cap_task_remove_channel_from_cache()
         {
-            m_type = l2cap_task_type::remove_channel_from_cache;
+            m_type = l2cap_task_type::remove_channel_from_ch_cache;
             set_source_module( l2cap_module::s_l2cap_module_name );
         }
 

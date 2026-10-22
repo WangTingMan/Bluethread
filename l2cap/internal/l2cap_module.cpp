@@ -157,7 +157,7 @@ void l2cap_module::handle_task( std::shared_ptr<abstract_task> a_task )
         case l2cap_task_type::disconnect_channel_request:
             m_connection_manager->disconnect_channel( detail_tsk );
             break;
-        case l2cap_task_type::remove_channel_from_cache:
+        case l2cap_task_type::remove_channel_from_ch_cache:
             m_connection_manager->remove_channel_from_cache( detail_tsk );
             break;
         default:

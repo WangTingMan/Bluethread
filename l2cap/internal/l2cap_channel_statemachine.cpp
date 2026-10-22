@@ -124,8 +124,6 @@ void l2cap_channel_close_state::on_enter()
         tsk->m_acl_type = get_statemachine().m_signaling_channel->get_acl_type();
         tsk->set_source_module( l2cap_module::s_l2cap_module_name );
         framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-
-        get_statemachine().clear();
     }
 }
 
@@ -1293,6 +1291,9 @@ bool l2cap_channel_wait_disconnect_state::handle_event( std::shared_ptr<state_ma
     case l2cap_channel_event::event_type::close_channel_request:
         /* do nothing, we already wait for disconnect response */
         break;
+    case l2cap_channel_event::event_type::handle_signaling_pkt:
+        handle_signaling_packet( event_->m_channel_pkt );
+        break;
     default:
         LogUtilError() << "Not handle event type: " << static_cast<uint32_t>( event_->m_type );
     }
@@ -1310,9 +1311,30 @@ void l2cap_channel_wait_disconnect_state::on_exit()
 
 }
 
-void l2cap_channel_wait_disconnect_state::handle_signaling_packet( std::shared_ptr<signaling_channel_packet> const& a_channel_pkt )
+void l2cap_channel_wait_disconnect_state::handle_signaling_packet
+    (
+    std::shared_ptr<signaling_channel_packet> const& a_channel_pkt
+    )
 {
-
+    switch( a_channel_pkt->m_signaling_code )
+    {
+    case signaling_code::l2cap_disconnection_req:
+        {
+            std::shared_ptr<l2cap_disconnect_request> detail_request;
+            detail_request = std::static_pointer_cast<l2cap_disconnect_request>( a_channel_pkt );
+            get_statemachine().m_signaling_channel->send_disconnect_response( detail_request->m_identifier,
+                detail_request->m_destination_cid, detail_request->m_source_cid );
+        }
+        transition_to_state( l2cap_channel_state_type::close_state );
+    break;
+    case signaling_code::l2cap_disconnection_rsp:
+        transition_to_state( l2cap_channel_state_type::close_state );
+        break;
+    default:
+        LogUtilError() << "Received signaling message on open state, ignored signaling: "
+            << a_channel_pkt->m_signaling_code;
+        break;
+    }
 }
 
 l2cap_channel_statemachine::l2cap_channel_statemachine()

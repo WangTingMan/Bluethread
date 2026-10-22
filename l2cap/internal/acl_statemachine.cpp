@@ -517,14 +517,22 @@ namespace bluetooth
 
     void acl_statemachine::remove_channel_from_cache( uint16_t a_local_cid )
     {
+        bool removed = false;
         for( auto it = m_channel_machines.begin(); it != m_channel_machines.end(); ++it )
         {
             if( (*it)->get_local_cid() == a_local_cid )
             {
                 LogUtilInfo() << "Remove channel state machine for local cid: " << a_local_cid;
                 m_channel_machines.erase( it );
+                removed = true;
                 return;
             }
+        }
+
+        if( !removed )
+        {
+            LogUtilError() << "to remove channel for local cid: " << a_local_cid
+                << ", but cannot found it.";
         }
     }
 
@@ -537,7 +545,7 @@ namespace bluetooth
         m_signaling_channel->start_query_info();
     }
 
-    void acl_statemachine::handle_signaling_pkt(std::shared_ptr<signaling_channel_packet> const& a_request)
+    void acl_statemachine::handle_signaling_pkt(std::shared_ptr<signaling_channel_packet> const& a_signaling_pkt )
     {
         int current_state = get_current_state_id();
         connection_status con_status = static_cast<connection_status>(current_state);
@@ -548,25 +556,28 @@ namespace bluetooth
             return;
         }
 
-        switch (a_request->m_signaling_code)
+        switch ( a_signaling_pkt->m_signaling_code)
         {
         case signaling_code::l2cap_connection_req:
-            handle_connection_request(std::static_pointer_cast<connection_request>(a_request));
+            handle_connection_request(std::static_pointer_cast<connection_request>( a_signaling_pkt ));
             break;
         case signaling_code::l2cap_configuration_req:
-            handle_config_request(std::static_pointer_cast<l2cap_config_request>(a_request));
+            handle_config_request(std::static_pointer_cast<l2cap_config_request>( a_signaling_pkt ));
             break;
         case signaling_code::l2cap_configuration_rsp:
-            handle_config_response(std::static_pointer_cast<l2cap_config_response>(a_request));
+            handle_config_response(std::static_pointer_cast<l2cap_config_response>( a_signaling_pkt ));
             break;
         case signaling_code::l2cap_disconnection_req:
-            handle_disconnect_request(std::static_pointer_cast<l2cap_disconnect_request>(a_request));
+            handle_disconnect_request(std::static_pointer_cast<l2cap_disconnect_request>( a_signaling_pkt ));
             break;
         case signaling_code::l2cap_connection_rsp:
-            handle_connect_response(std::static_pointer_cast<l2cap_connect_response>(a_request));
+            handle_connect_response(std::static_pointer_cast<l2cap_connect_response>( a_signaling_pkt ));
+            break;
+        case signaling_code::l2cap_disconnection_rsp:
+            handle_disconnect_response( std::static_pointer_cast<l2cap_disconnect_response>( a_signaling_pkt ) );
             break;
         default:
-            LogUtilError() << "Not handle request code: " << a_request->m_signaling_code;
+            LogUtilError() << "Not handle request code: " << a_signaling_pkt->m_signaling_code;
             break;
         }
     }
@@ -799,6 +810,22 @@ namespace bluetooth
         event_->m_channel_pkt = a_request;
         event_->m_type = l2cap_channel_event::event_type::handle_signaling_pkt;
         channel->handle_event(event_);
+    }
+
+    void acl_statemachine::handle_disconnect_response( std::shared_ptr<l2cap_disconnect_response> a_response )
+    {
+        std::shared_ptr<l2cap_channel_statemachine> channel;
+        channel = find_channel_state_machine( a_response->m_source_cid );
+        if( !channel )
+        {
+            LogUtilError() << "No channel machine for local channel id: " << a_response->m_source_cid;
+            return;
+        }
+
+        std::shared_ptr<l2cap_channel_event> event_ = std::make_shared<l2cap_channel_event>();
+        event_->m_channel_pkt = a_response;
+        event_->m_type = l2cap_channel_event::event_type::handle_signaling_pkt;
+        channel->handle_event( event_ );
     }
 
     std::shared_ptr<l2cap_channel_statemachine> acl_statemachine::find_channel_state_machine

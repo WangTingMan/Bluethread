@@ -971,17 +971,16 @@ bool rfcomm_port_open_state::handle_event( std::shared_ptr<state_machine::abstra
     case rfcomm_port_event_type::controlling_message:
         {
             rfcomm_header* header = event_->m_rfcomm_header;
-            rfcomm_header header_send;
             bool local_inited = !header->cr_value_in_header();
             switch( header->get_frame_type() )
             {
             case rfcomm_frame_type::disc:
-                header_send.set_dlci( header->get_dlci() );
-                header_send.set_cr( local_inited ? true : false );
-                header_send.set_frame_type( rfcomm_frame_type::ua );
-                header_send.set_poll_final( true );
-                header_send.set_sdu_length( 0x00 );
-                get_port().m_port_sender( header_send, nullptr, 0x00 );
+                get_port().send_ua_frame();
+                transition_to_state( rfcomm_port_state_type::idle_state );
+                post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
+                    get_port().local_inited_port_connection() );
+                break;
+            case rfcomm_frame_type::dm:
                 transition_to_state( rfcomm_port_state_type::idle_state );
                 post_remove_port_connection_task( get_port().m_remote_device, get_port().get_port(),
                     get_port().local_inited_port_connection() );
@@ -1234,7 +1233,7 @@ void rfcomm_port_connection::send_user_data( std::shared_ptr<std::vector<uint8_t
     uint8_t credit_increased = s_max_credit_local - static_cast<uint8_t>( m_local_credit_value );
     m_local_credit_value = s_max_credit_local;
     header.set_credit_increase_value( credit_increased );
-    header.set_cr( local_inited_port_connection() );
+    header.set_cr( m_local_inited_multiplexer );
 
     uint8_t* p_buffer = nullptr;
     uint16_t size = 0;
@@ -1392,7 +1391,7 @@ void rfcomm_port_connection::send_dm_frame()
     header_send.set_frame_type( rfcomm_frame_type::dm );
 
     header_send.set_dlci( get_dlci() );
-    header_send.set_cr( true );
+    header_send.set_cr( !m_local_inited_multiplexer );
     header_send.set_poll_final( true ); // We need set the F bit to 1 here.
     header_send.set_sdu_length( 0x00 ); // UA frame do not have information to send.
 
@@ -1412,7 +1411,7 @@ void rfcomm_port_connection::send_ua_frame()
     header_send.set_frame_type( rfcomm_frame_type::ua );
 
     header_send.set_dlci( get_dlci() );
-    header_send.set_cr( true );
+    header_send.set_cr( !m_local_inited_multiplexer );
     header_send.set_poll_final( true ); // We need set the F bit to 1 here.
     header_send.set_sdu_length( 0x00 ); // UA frame do not have information to send.
 
@@ -1430,7 +1429,7 @@ void rfcomm_port_connection::send_disc_frame()
 {
     rfcomm_header header_send;
     header_send.set_dlci( get_dlci() );
-    header_send.set_cr( local_inited_port_connection() ? true : false);
+    header_send.set_cr( m_local_inited_multiplexer );
     header_send.set_frame_type( rfcomm_frame_type::disc );
     header_send.set_poll_final( true );
     header_send.set_sdu_length( 0x00 );

@@ -716,7 +716,13 @@ void rfcomm_multipexer_connected::handle_controlling( std::shared_ptr<rfcomm_mul
                 return;
             }
 
-            auto port = get_multipexer().find_port( remote_address, header.get_port(), false );
+            bool local_inited_port = false;
+            uint8_t port_number = header.get_port();
+            uint8_t dlci_used = header.get_dlci();
+            uint8_t test_dlci = make_dlci_for_remote_port( port_number, get_multipexer().m_local_inited );
+            local_inited_port = ( test_dlci == dlci_used );
+
+            auto port = get_multipexer().find_port( remote_address, header.get_port(), local_inited_port );
             if( port )
             {
                 port->handle_controlling( header );
@@ -745,16 +751,32 @@ void rfcomm_multipexer_connected::handle_controlling( std::shared_ptr<rfcomm_mul
         }
         else
         {
-            bool local_inited = !header.cr_value_in_header();
-            auto port = get_multipexer().find_port( get_multipexer().m_remote_address, header.get_port(), local_inited );
-            if( port )
+            bool local_inited_port = false;
+            uint8_t port = header.get_port();
+            uint8_t dlci_used = header.get_dlci();
+            uint8_t test_dlci = make_dlci_for_remote_port( port, get_multipexer().m_local_inited );
+            local_inited_port = ( test_dlci == dlci_used );
+
+            auto port_con = get_multipexer().find_port( get_multipexer().m_remote_address,
+                header.get_port(), local_inited_port );
+            if( port_con )
             {
-                port->handle_controlling( header );
+                port_con->handle_controlling( header );
             }
             else
             {
                 LogUtilError() << "Cannot find port. address: " << get_multipexer().m_remote_address.to_string()
                     << ", port: " << static_cast< uint32_t >( header.get_port() );
+                /* Ref 0710-720 spec 5.3.3:
+                 * If a DISC command is received while in disconnected mode a DM response should be sent.
+                 */
+                rfcomm_header header_send;
+                header_send.set_frame_type( rfcomm_frame_type::dm );
+                header_send.set_dlci( dlci_used );
+                header_send.set_cr( !get_multipexer().m_local_inited );
+                header_send.set_poll_final( true ); // We need set the F bit to 1 here.
+                header_send.set_sdu_length( 0x00 ); // UA frame do not have information to send.
+                get_multipexer().send_port_data( header_send, nullptr, 0 );
             }
             get_multipexer().check_working_port();
         }
@@ -766,8 +788,14 @@ void rfcomm_multipexer_connected::handle_controlling( std::shared_ptr<rfcomm_mul
         }
         else
         {
-            bool local_inited = header.cr_value_in_header();
-            auto port = get_multipexer().find_port( get_multipexer().m_remote_address, header.get_port(), local_inited );
+            bool local_inited_port = false;
+            uint8_t port_number = header.get_port();
+            uint8_t dlci_used = header.get_dlci();
+            uint8_t test_dlci = make_dlci_for_remote_port( port_number, get_multipexer().m_local_inited );
+            local_inited_port = ( test_dlci == dlci_used );
+
+            auto port = get_multipexer().find_port( get_multipexer().m_remote_address,
+                header.get_port(), local_inited_port );
             if( port )
             {
                 port->handle_controlling( header );
@@ -775,9 +803,37 @@ void rfcomm_multipexer_connected::handle_controlling( std::shared_ptr<rfcomm_mul
             else
             {
                 LogUtilError() << "Cannot find port. address: " << get_multipexer().m_remote_address.to_string()
-                    << ", port: " << static_cast< uint32_t >( header.get_port() ) << ( local_inited ? " local inited" : " remote inited" );
+                    << ", port: " << static_cast< uint32_t >( header.get_port() )
+                    << ( local_inited_port ? " local inited" : " remote inited" );
             }
             get_multipexer().check_working_port();
+        }
+        break;
+    case rfcomm_frame_type::dm:
+        if( header.get_port() == s_rfcomm_multipexer_channel )
+        {
+            transition_to_state( rfcomm_multipexer_state_type::idle );
+        }
+        else
+        {
+            bool local_inited_port = false;
+            uint8_t port_number = header.get_port();
+            uint8_t dlci_used = header.get_dlci();
+            uint8_t test_dlci = make_dlci_for_remote_port( port_number, get_multipexer().m_local_inited );
+            local_inited_port = ( test_dlci == dlci_used );
+
+            auto port = get_multipexer().find_port( get_multipexer().m_remote_address,
+                header.get_port(), local_inited_port );
+            if( port )
+            {
+                port->handle_controlling( header );
+            }
+            else
+            {
+                LogUtilError() << "Cannot find port. address: " << get_multipexer().m_remote_address.to_string()
+                    << ", port: " << static_cast<uint32_t>( header.get_port() )
+                    << ( local_inited_port ? " local inited" : " remote inited" );
+            }
         }
         break;
     default:
@@ -949,10 +1005,10 @@ void rfcomm_multipexer::connect( std::shared_ptr<rfcomm_task_connect_port> a_tas
     handle_event( event_ );
 }
 
-void rfcomm_multipexer::disconnect( uint8_t a_port, bool a_port_on_local )
+void rfcomm_multipexer::disconnect_port( uint8_t a_port, bool a_port_local_inited )
 {
     std::shared_ptr<rfcomm_port_connection> port;
-    port = find_port( m_remote_address, a_port, a_port_on_local );
+    port = find_port( m_remote_address, a_port, a_port_local_inited );
     if( port )
     {
         port->disconnect();
@@ -967,12 +1023,12 @@ void rfcomm_multipexer::disconnect( uint8_t a_port, bool a_port_on_local )
 void rfcomm_multipexer::send_port_user_data
     (
     uint8_t a_port,
-    bool a_port_on_local,
+    bool a_port_local_inited,
     std::shared_ptr<std::vector<uint8_t>> a_spp_data
     )
 {
     std::shared_ptr<rfcomm_port_connection> port;
-    port = find_port( m_remote_address, a_port, a_port_on_local );
+    port = find_port( m_remote_address, a_port, a_port_local_inited );
     if( port )
     {
         port->send_user_data( a_spp_data );
@@ -1204,10 +1260,11 @@ void rfcomm_multipexer::handle_uih_frame
     }
     else
     {
-        /**
-         * If remote device is the port connection initor, then the remote device will set this CR bit here.
-         */
-        bool local_inited = !( a_header.cr_value_in_header() );
+        bool local_inited_port = false;
+        uint8_t port = a_header.get_port();
+        uint8_t dlci_used = a_header.get_dlci();
+        uint8_t test_dlci = make_dlci_for_remote_port( port, m_local_inited );
+        local_inited_port = ( test_dlci == dlci_used );
 
         auto acl_db = framework_manager::get_instance().get_info_manager()
             .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
@@ -1218,8 +1275,7 @@ void rfcomm_multipexer::handle_uih_frame
             return;
         }
 
-        uint8_t port = a_header.get_port();
-        std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited );
+        std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited_port );
         if( p_port )
         {
             p_port->handle_received_uih_data( a_hci_data, a_header );
@@ -1227,7 +1283,7 @@ void rfcomm_multipexer::handle_uih_frame
         else
         {
             LogUtilError() << "No local port entity for address: " << remote_address.to_string() << ", port: "
-                << port << ", " << ( local_inited ? "local inited" : "remote inited" );
+                << port << ", " << ( local_inited_port ? "local inited" : "remote inited" );
         }
     }
 }
@@ -1274,7 +1330,6 @@ void rfcomm_multipexer::handle_multipexer_pn
     std::shared_ptr<multipexer_pn_message> const& a_pn
     )
 {
-    bool local_inited_port_connection = !( a_pn->is_command_in_uih() );
     auto acl_db = framework_manager::get_instance().get_info_manager()
         .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
     auto [remote_address,has_address] = acl_db->get_address( a_rfc_header.get_acl_handle() );
@@ -1284,9 +1339,13 @@ void rfcomm_multipexer::handle_multipexer_pn
         return;
     }
 
-    uint8_t port = a_pn->get_port();
+    bool local_inited_port = false;
+    uint8_t port_number = a_pn->get_port();
+    uint8_t dlci_used = a_pn->get_dlci();
+    uint8_t test_dlci = make_dlci_for_remote_port( port_number, m_local_inited );
+    local_inited_port = ( test_dlci == dlci_used );
 
-    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port, local_inited_port_connection );
+    std::shared_ptr<rfcomm_port_connection> p_port = find_port( remote_address, port_number, local_inited_port );
     if( !p_port )
     {
         if( !m_idle_ports.empty() )
@@ -1303,7 +1362,7 @@ void rfcomm_multipexer::handle_multipexer_pn
             m_worked_ports.emplace_back( p_port );
         }
         p_port->set_dlci( a_pn->get_dlci() );
-        p_port->set_local_inited_port( local_inited_port_connection );
+        p_port->set_local_inited_port( local_inited_port );
         p_port->set_local_inited_multiplexer( m_local_inited );
         p_port->set_remote_device( remote_address );
         p_port->set_control_sender( std::bind( &rfcomm_multipexer::send_multipexer_message,
@@ -1320,7 +1379,7 @@ void rfcomm_multipexer::handle_multipexer_pn
         {
             LogUtilError() << "There is no callback register for port: " <<
                 static_cast< uint16_t >( p_port->get_port() ) << ", local inited: "
-                << std::boolalpha << local_inited_port_connection;
+                << std::boolalpha << local_inited_port;
         }
     }
 
@@ -1433,7 +1492,7 @@ void rfcomm_multipexer::send_disc_frame()
 {
     rfcomm_header header_send;
     header_send.set_dlci( 0 );
-    header_send.set_cr( !m_local_inited );
+    header_send.set_cr( m_local_inited );
     header_send.set_frame_type( rfcomm_frame_type::disc );
     header_send.set_poll_final( true );
     header_send.set_sdu_length( 0x00 );
@@ -1445,9 +1504,14 @@ void rfcomm_multipexer::send_multipexer_message( std::shared_ptr<multipexer_mess
     rfcomm_header header;
     header.set_frame_type( rfcomm_frame_type::uih );
     header.set_channel_number( s_rfcomm_multipexer_channel );
-    header.set_poll_final( true );
     header.set_sdu_length( a_pn->get_raw_buffer_size() );
-    header.set_cr( !m_local_inited );
+
+    /* ref 0710-720 spec, section 5.4.3.1, for UIH frame on channel 0( control channel ), we need do these:
+     * The frames sent by the initiating station have the C/R bit set to 1 and those
+     * sent by the responding station have the C/R bit set to 0. Both stations set the P-bit to 0.
+     */
+    header.set_poll_final( false );
+    header.set_cr( m_local_inited );
 
     uint8_t buffer[100];
     header.to_raw_buffer( buffer, 100 );

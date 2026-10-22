@@ -108,7 +108,7 @@ public:
 
     bluetooth_address m_address;
     uint8_t m_port = 0x00;
-    bool m_port_on_local = false;
+    bool is_local_inited_port_connection = false;
 };
 
 class spp_connect_default_spp_task : public spp_task

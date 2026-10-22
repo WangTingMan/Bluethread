@@ -329,12 +329,12 @@ public:
 
     void connect( std::shared_ptr<rfcomm_task_connect_port> a_task );
 
-    void disconnect( uint8_t a_port, bool a_port_on_local );
+    void disconnect_port( uint8_t a_port, bool a_port_local_inited );
 
     void send_port_user_data
         (
         uint8_t a_port,
-        bool a_port_on_local,
+        bool a_port_local_inited,
         std::shared_ptr<std::vector<uint8_t>> a_spp_data
         );
 

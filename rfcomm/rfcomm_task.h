@@ -92,7 +92,7 @@ public:
 
     bluetooth_address address;
     uint8_t port = 0;
-    bool port_on_local = false;
+    bool is_local_inited_port_connection = false;
 };
 
 class rfcomm_task_async_send_spp_data : public rfcomm_task
@@ -107,7 +107,7 @@ public:
 
     bluetooth_address address;
     uint8_t port = 0;
-    bool port_on_local = false;
+    bool port_local_inited = false;
     std::shared_ptr<std::vector<uint8_t>> spp_data;
 };
 

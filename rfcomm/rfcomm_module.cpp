@@ -125,7 +125,7 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
             mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
             if( mulx )
             {
-                mulx->disconnect( rfc_detail_tsk->port, rfc_detail_tsk->port_on_local );
+                mulx->disconnect_port( rfc_detail_tsk->port, rfc_detail_tsk->is_local_inited_port_connection );
             }
             else
             {
@@ -139,7 +139,12 @@ void rfcomm_module::handle_task( std::shared_ptr<abstract_task> a_task )
             mulx = find_multipexer_by_remote( rfc_detail_tsk->address );
             if( mulx )
             {
-                mulx->send_port_user_data( rfc_detail_tsk->port, rfc_detail_tsk->port_on_local, std::move( rfc_detail_tsk->spp_data ) );
+                mulx->send_port_user_data
+                    (
+                    rfc_detail_tsk->port,
+                    rfc_detail_tsk->port_local_inited,
+                    std::move( rfc_detail_tsk->spp_data )
+                    );
             }
             else
             {

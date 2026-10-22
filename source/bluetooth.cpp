@@ -343,7 +343,7 @@ void disconnect_port( bluetooth_address a_address, uint8_t a_port, bool a_port_o
     task = std::make_shared<bluetooth::spp_disconnect_specified_port_task>();
     task->m_port = a_port;
     task->m_address = a_address;
-    task->m_port_on_local = a_port_on_local;
+    task->is_local_inited_port_connection = !a_port_on_local;
     task->set_target_module( bluetooth::spp_module::s_spp_module_name );
 
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );

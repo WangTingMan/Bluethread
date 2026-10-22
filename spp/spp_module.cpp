@@ -86,7 +86,7 @@ void spp_module::handle_task( std::shared_ptr<abstract_task> a_task )
     case spp_task_type::spp_disconnect_specified_port:
         {
             auto detail_task = static_pointer_cast<spp_disconnect_specified_port_task>( _spp_task );
-            disconnect( detail_task->m_address, detail_task->m_port, detail_task->m_port_on_local );
+            disconnect_port( detail_task->m_address, detail_task->m_port, detail_task->is_local_inited_port_connection );
         }
         break;
     case spp_task_type::spp_disconnect_specified_address:
@@ -544,7 +544,7 @@ void spp_module::handle_spp_connection_failed( std::shared_ptr<spp_connection> a
     framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
-void spp_module::disconnect
+void spp_module::disconnect_port
     (
     bluetooth_address a_address,
     uint8_t a_port,
@@ -565,7 +565,7 @@ void spp_module::disconnect
         task = std::make_shared<rfcomm_task_disconnect_specified_port>();
         task->port = a_port;
         task->address = a_address;
-        task->port_on_local = a_port_on_local;
+        task->is_local_inited_port_connection = a_port_on_local;
         task->set_target_module( rfcomm_module::s_rfcomm_module_name );
         conection_->set_connection_status( connection_status::disconnecting );
 
@@ -596,7 +596,7 @@ void spp_module::disconnect
             task = std::make_shared<rfcomm_task_disconnect_specified_port>();
             task->port = ele->get_port();
             task->address = ele->get_remote_device();
-            task->port_on_local = ele->local_inited();
+            task->is_local_inited_port_connection = ele->local_inited();
             task->set_target_module( rfcomm_module::s_rfcomm_module_name );
             ele->set_connection_status( connection_status::disconnecting );
 
@@ -683,7 +683,7 @@ void spp_module::send_port_data
     task = std::make_shared<rfcomm_task_async_send_spp_data>();
     task->port = a_port;
     task->address = a_address;
-    task->port_on_local = a_local_inited;
+    task->port_local_inited = a_local_inited;
     task->spp_data = std::move( a_spp_data );
     task->set_target_module( rfcomm_module::s_rfcomm_module_name );
     task->set_source_module( get_name() );

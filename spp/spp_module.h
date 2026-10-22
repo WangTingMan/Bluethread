@@ -94,7 +94,7 @@ private:
 
     void handle_spp_connection_failed( std::shared_ptr<spp_connection> a_sdp_conn );
 
-    void disconnect
+    void disconnect_port
         (
         bluetooth_address a_address,
         uint8_t a_port,

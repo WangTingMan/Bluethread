@@ -14,6 +14,7 @@
  * Commercial closed-source licenses are available upon request.
  */
 
+#include "common.h"
 #include "bluetooth.h"
 #include "uuid.h"
 #include "stack/stack_manager.h"
@@ -263,16 +264,16 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
 {
     uint8_t ret = 0;
     std::vector<bluetooth::uuid> uuids;
-    char* p_uuid = parameter.uuids;
+    auto p_uuid = parameter.uuids;
     for( uint8_t i = 0; i < parameter.uuid_count; ++i )
     {
         bluetooth::uuid uuid_;
-        memcpy( uuid_.uu.data(), p_uuid, bluetooth::uuid::s_128bituuid_size );
-        p_uuid += bluetooth::uuid::s_128bituuid_size;
+        memcpy( uuid_.uu.data(), p_uuid->uuid_value, bluetooth::uuid::s_128bituuid_size );
+        p_uuid += 1;
         uuids.push_back( uuid_ );
     }
 
-    std::u8string name( reinterpret_cast< std::u8string::value_type const* >( parameter.service_name ) );
+    std::u8string name( reinterpret_cast<std::u8string::value_type const*>( parameter.service_name ) );
 
     std::shared_ptr<bluetooth::spp_register_new_service_task> task;
     task = std::make_shared<bluetooth::spp_register_new_service_task>();

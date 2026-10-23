@@ -21,7 +21,7 @@
 #include "common/bluetooth_common_event.h"
 
 #include "uuid.h"
-#include "spp_connection.h"
+#include "internal/spp_connection.h"
 #include "data_element.h"
 #include "bluetooth_address.h"
 #include "spp/spp_task.h"

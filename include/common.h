@@ -76,12 +76,6 @@ enum class function_type : uint16_t
                                 */
 };
 
-struct visibility
-{
-    enable_status discoverable;
-    enable_status connectable;
-};
-
 enum class remote_device_attribute_type
 {
     completed_device_name, // utf8 string
@@ -90,6 +84,17 @@ enum class remote_device_attribute_type
     inquiry_rssi, // signed 1 byte to indicate rssi
     device_cod, // three bytes to indicate class of device
 };
+
+struct visibility
+{
+    enable_status discoverable;
+    enable_status connectable;
+};
+
+typedef struct _uuid
+{
+    uint8_t uuid_value[16];
+} uuid_type;
 
 struct remote_device_attribute
 {
@@ -115,7 +120,7 @@ struct remote_device_info
 struct serial_port_register_parameters
 {
     char const* service_name = nullptr; // service name, encoded in utf-8
-    char* uuids = nullptr;  // registered uuid. To use spp uuid, then this pointer canbe null
+    uuid_type* uuids = nullptr;  // registered uuid. To use spp uuid, then this pointer canbe null
     uint8_t uuid_count = 0; // the uuid count
 };
 

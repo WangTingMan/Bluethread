@@ -188,10 +188,12 @@ void spp_module::handle_service_record_registered
     cb.port_number = a_port;
     cb.is_local_port = true;
     cb.handle_module = s_spp_module_name;
-    cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed, this, std::placeholders::_1,
-        std::placeholders::_2, a_port, false );
-    cb.connection_request_callback = std::bind( &spp_module::handle_connection_request, this, std::placeholders::_1, a_port );
-    cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
+    cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed,
+        this, std::placeholders::_1, std::placeholders::_2, a_port, false );
+    cb.connection_request_callback = std::bind( &spp_module::handle_connection_request,
+        this, std::placeholders::_1, a_port );
+    cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1,
+        std::placeholders::_2, std::placeholders::_3,
         std::placeholders::_4, a_port, false );
 
     auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();

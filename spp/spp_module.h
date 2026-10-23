@@ -52,13 +52,12 @@ public:
 
 private:
 
-    void handle_service_record_registered
+    void handle_rfcomm_port_registered
         (
-        uint32_t a_record_handle,
         std::u8string a_name,
-        std::function<void( uint8_t )> a_registered_callback,
         uint8_t a_port,
-        std::vector<uuid> a_uuids
+        std::vector<uuid> a_uuids,
+        std::function<void( uint8_t )> a_registered_callback
         );
 
     void handle_connection_request
@@ -144,7 +143,6 @@ private:
         );
 
     uint32_t m_spp_base_record_id = 0x00;
-    uint8_t m_next_port_number = 0x00;
     std::vector<local_spp_service_info> m_local_spp_services;
 
     std::vector<std::shared_ptr<spp_connection>> m_connections;

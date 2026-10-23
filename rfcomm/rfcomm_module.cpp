@@ -16,9 +16,10 @@
 
 #include "rfcomm_module.h"
 
-#include "framework/log_util.h"
+#include "framework/executable_task.h"
 #include "framework/framework_event.h"
 #include "framework/framework_manager.h"
+#include "framework/log_util.h"
 #include "framework/utils.h"
 
 #include "../l2cap/l2cap_module.h"
@@ -213,26 +214,33 @@ void rfcomm_module::handle_event( std::shared_ptr<framework_event> a_event )
     }
 }
 
-void rfcomm_module::register_callback( rfcomm_port_callback_block a_callback )
+bool rfcomm_module::register_callback( rfcomm_port_callback_block a_callback, uint8_t& a_port_used )
 {
     LogUtilDebug() << "register port callback for port: " << (uint16_t)a_callback.port_number
         << ( a_callback.is_local_port ? " local port" : " remote port" );
-    if( 0x00 == a_callback.port_number )
+    a_port_used = 0;
+    uint8_t port_used = a_callback.port_number;
+    if( 0x00 == a_callback.port_number || port_register_as_local( a_callback.port_number ) )
     {
-        LogUtilError() << "Cannot register callback for port 0( multipexer port)";
-        return;
+        LogUtilDebug() << "allocate a new port for this";
+        port_used = get_next_available_port_number();
+        if( port_used == 0x00 )
+        {
+            LogUtilDebug() << "allocate a new port faild";
+            return false;
+        }
     }
 
     for( auto& ele : m_port_callbacks )
     {
-        if( ele->port_number == a_callback.port_number )
+        if( ele->port_number == port_used )
         {
             if( ele->is_local_port && a_callback.is_local_port )
             {
-                LogUtilError() << "port callback for port: " << static_cast<uint32_t>( a_callback.port_number )
+                LogUtilError() << "port callback for port: " << static_cast<uint32_t>( port_used )
                     << std::boolalpha << ", local inited: " << a_callback.is_local_port
                     << ", already registered";
-                return;
+                return false;
             }
             else
             {
@@ -240,18 +248,21 @@ void rfcomm_module::register_callback( rfcomm_port_callback_block a_callback )
                 {
                     if( ele->remote_address == a_callback.remote_address )
                     {
-                        LogUtilError() << "port callback for port: " << static_cast<uint32_t>( a_callback.port_number )
+                        LogUtilError() << "port callback for port: " << static_cast<uint32_t>( port_used )
                             << std::boolalpha << ", is local port: " << a_callback.is_local_port << ", remote device: "
                             << a_callback.remote_address.to_string()
                             << ", already registered";
-                        return;
+                        return false;
                     }
                 }
             }
         }
     }
 
+    a_callback.port_number = port_used;
     m_port_callbacks.push_back( std::make_shared<rfcomm_port_callback_block>( a_callback ) );
+    a_port_used = port_used;
+    return true;
 }
 
 void rfcomm_module::handle_connect_request( std::shared_ptr<connection_request> const& a_request )
@@ -505,13 +516,23 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
 {
     if( a_task->to_register )
     {
-        register_callback( a_task->port_callback );
+        bool result = false;
+        uint8_t port_number = 0;
+        result = register_callback( a_task->port_callback, port_number );
+        if( a_task->register_result_callback )
+        {
+            std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
+            task->set_fun( std::bind( a_task->register_result_callback, port_number ), a_task->callback_module );
+            framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+        }
     }
     else
     {
         uint8_t port = a_task->port_callback.port_number;
         bool is_local_port = a_task->port_callback.is_local_port;
         bluetooth_address peer_addr = a_task->port_callback.remote_address;
+        bool to_schedule_calback = false;
+        bool result = false;
         for( auto it = m_port_callbacks.begin(); it != m_port_callbacks.end(); ++it)
         {
             std::shared_ptr<rfcomm_port_callback_block> ele = *it;
@@ -527,12 +548,14 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
                     LogUtilDebug() << "unregister port callback for local port: "
                         << (uint16_t)( port );
                     it = m_port_callbacks.erase( it );
-                    return;
+                    to_schedule_calback = true;
+                    result = true;
+                    break;
                 }
                 else
                 {
                     LogUtilError() << "did not register callback for local port: " << uint32_t( port );
-                    return;
+                    break;
                 }
             }
 
@@ -541,8 +564,19 @@ void rfcomm_module::do_port_callback_operation( std::shared_ptr<rfcomm_task_port
                 LogUtilDebug() << "unregister port callback for remote port: "
                     << (uint16_t)( port ) << ", on device: " << peer_addr.to_string();
                 it = m_port_callbacks.erase( it );
-                return;
+                to_schedule_calback = true;
+                result = true;
+                break;
             }
+        }
+
+
+        if( to_schedule_calback && a_task->register_result_callback )
+        {
+            std::shared_ptr<executable_task> task;
+            task = std::make_shared<executable_task>();
+            task->set_fun( std::bind( a_task->register_result_callback, result ? port : 0 ), a_task->callback_module );
+            framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
         }
     }
 }
@@ -664,6 +698,47 @@ std::shared_ptr<rfcomm_port_callback_block> rfcomm_module::find_port_callback
         << ", address " << a_peer_address.to_string() << ", "
         << ( a_is_local_port ? "local port" : "remote port" );
     return nullptr;
+}
+
+uint8_t rfcomm_module::get_next_available_port_number()
+{
+    uint8_t port = framework::get_real_random( 1, 30 );
+    bool found = port_register_as_local( port );
+    if( !found )
+    {
+        return port;
+    }
+
+    port = 0;
+    for( int i = 1; i < 31; ++i )
+    {
+        found = port_register_as_local( i );
+        if( !found )
+        {
+            port = i;
+            break;
+        }
+    }
+
+    return port;
+}
+
+bool rfcomm_module::port_register_as_local( uint8_t a_port )
+{
+    for( auto& cb : m_port_callbacks )
+    {
+        if( !cb->is_local_port )
+        {
+            continue;
+        }
+
+        if( cb->port_number == a_port )
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 }

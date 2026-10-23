@@ -31,8 +31,6 @@
 #include "spp/spp_task.h"
 #include "spp/spp_sdp_utils.h"
 
-static constexpr uint8_t s_spp_port_start = 10;
-
 namespace bluetooth
 {
 
@@ -46,7 +44,6 @@ spp_module::spp_module()
 
 void spp_module::initialize()
 {
-    m_next_port_number = s_spp_port_start;
     spp_task::s_spp_task_type_id = framework_manager::get_instance().register_task_type( 1 );
 }
 
@@ -124,7 +121,6 @@ void spp_module::handle_event( std::shared_ptr<framework_event> a_event )
     switch( a_event->m_event_type )
     {
     case event_type::power_on:
-        m_next_port_number = s_spp_port_start;
         set_power_status( abstract_module::powering_status::power_on );
         break;
     case event_type::power_off:
@@ -145,61 +141,101 @@ void spp_module::handle_event( std::shared_ptr<framework_event> a_event )
     }
 }
 
-void spp_module::handle_service_record_registered
+void spp_module::handle_rfcomm_port_registered
     (
-    uint32_t a_record_handle,
     std::u8string a_name,
-    std::function<void( uint8_t )> a_registered_callback,
     uint8_t a_port,
-    std::vector<uuid> a_uuids
+    std::vector<uuid> a_uuids,
+    std::function<void( uint8_t )> a_registered_callback
     )
 {
-    LogUtilInfo() << "service: " << convert( a_name ) << " registered. port: "
-        << static_cast< uint32_t >( a_port );
+    LogUtilInfo() << "service: " << convert( a_name ) << " rfcomm registered. port: "
+        << static_cast< uint32_t >( a_port ) << ", going to register sdp service record";
 
-    bool found = false;
-    for( auto& ele : m_local_spp_services )
+    uint8_t port_used = a_port;
+
+    std::shared_ptr<sdp_service_record> spp_base_sdp_record;
+    spp_base_sdp_record = std::make_shared<sdp_service_record>();
+
+    std::vector<uuid> service_uuids;
+    auto spp_uuid = uuid::from_16bit( sdp_service_uuid::serial_port );
+    if( a_uuids.empty() )
     {
-        if( ele.uuids == a_uuids )
+        service_uuids.push_back( spp_uuid );
+    }
+    else
+    {
+        service_uuids = a_uuids;
+        bool has_spp_uuid = false;
+        for( auto& ele : service_uuids )
         {
-            ele.port_number = a_port;
-            ele.sdp_service_recode_handle = a_record_handle;
-            ele.service_name = a_name;
-            LogUtilError() << "Using already exsited spp service info";
-            found = true;
-            break;
+            if( ele == spp_uuid )
+            {
+                has_spp_uuid = true;
+                break;
+            }
+        }
+
+        if( !has_spp_uuid )
+        {
+            service_uuids.push_back( spp_uuid );
         }
     }
+    spp_base_sdp_record->set_service_class_id_list( service_uuids );
 
-    if( !found )
-    {
-        local_spp_service_info info;
-        info.port_number = a_port;
-        info.sdp_service_recode_handle = a_record_handle;
-        info.service_name = a_name;
-        info.uuids = a_uuids;
-        m_local_spp_services.push_back( info );
-    }
+    std::vector<protocol_descriptor> desc_list;
+    protocol_descriptor desc_;
+    desc_.m_uuid = uuid::from_16bit( sdp_service_uuid::l2cap );
+    desc_list.push_back( desc_ );
+    desc_.m_uuid = uuid::from_16bit( sdp_service_uuid::rfcomm );
+    sdp_data_element paras;
+    paras.set_uint8_value( port_used );
+    desc_.m_parameters.push_back( paras );
+    desc_list.push_back( desc_ );
+    spp_base_sdp_record->set_protocol_descriptor_list( desc_list );
 
-    a_registered_callback( a_port );
-    m_spp_base_record_id = a_record_handle;
+    std::vector<sdp_data_element> profile_desc;
+    paras.set_uuid( uuid::from_16bit( sdp_service_uuid::serial_port ) );
+    profile_desc.push_back( paras );
+    paras.set_uint16_value( 0x0102 );
+    profile_desc.push_back( paras );
+    spp_base_sdp_record->set_bluetooth_profile_descriptor_list( profile_desc );
 
-    rfcomm_port_callback_block cb;
-    cb.port_number = a_port;
-    cb.is_local_port = true;
-    cb.handle_module = s_spp_module_name;
-    cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed,
-        this, std::placeholders::_1, std::placeholders::_2, a_port, false );
-    cb.connection_request_callback = std::bind( &spp_module::handle_connection_request,
-        this, std::placeholders::_1, a_port );
-    cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1,
-        std::placeholders::_2, std::placeholders::_3,
-        std::placeholders::_4, a_port, false );
+    spp_base_sdp_record->set_default_language();
 
-    auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();
-    tsk->to_register = true;
-    tsk->port_callback = cb;
+    paras.set_string_value( a_name );
+    spp_base_sdp_record->set_attribute
+        (
+        attribute_id_offset_for_string::provider_name_offset + language_base_id::english,
+        paras
+        );
+
+    std::shared_ptr<sdp_task_register_service_record> tsk;
+    tsk = std::make_shared<sdp_task_register_service_record>();
+    tsk->m_callback_handle_module = get_name();
+    tsk->m_registered_callback = [this, a_uuids, port_used, a_registered_callback]( uint32_t a_sdp_service_record_handle )
+        {
+            bool found = false;
+            for( auto& ele : m_local_spp_services )
+            {
+                if( ele.uuids == a_uuids )
+                {
+                    ele.port_number = port_used;
+                    ele.sdp_service_recode_handle = a_sdp_service_record_handle;
+                    found = true;
+                    break;
+                }
+            }
+
+            if( found && a_registered_callback )
+            {
+                a_registered_callback( port_used );
+            }
+        };
     tsk->set_source_module( get_name() );
+    tsk->set_target_module( sdp_module::s_sdp_module_name );
+    tsk->m_service_record = spp_base_sdp_record;
+
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 
@@ -701,74 +737,55 @@ void spp_module::create_new_spp
     )
 {
     LogUtilInfo() << "register spp, name: " << convert( a_name );
-    uint8_t port_used = m_next_port_number;
-    ++m_next_port_number;
-
-    std::shared_ptr<sdp_service_record> spp_base_sdp_record;
-    spp_base_sdp_record = std::make_shared<sdp_service_record>();
-
-    std::vector<uuid> service_uuids;
-    auto spp_uuid = uuid::from_16bit( sdp_service_uuid::serial_port );
     if( a_uuids.empty() )
     {
-        service_uuids.push_back( spp_uuid );
+        auto spp_uuid = uuid::from_16bit( sdp_service_uuid::serial_port );
+        a_uuids.push_back( spp_uuid );
     }
-    else
+
+    bool found = false;
+    for( auto& ele : m_local_spp_services )
     {
-        service_uuids = std::move( a_uuids );
-        bool has_spp_uuid = false;
-        for( auto& ele : service_uuids )
+        if( ele.uuids == a_uuids )
         {
-            if( ele == spp_uuid )
-            {
-                has_spp_uuid = true;
-                break;
-            }
-        }
-
-        if( !has_spp_uuid )
-        {
-            service_uuids.push_back( spp_uuid );
+            LogUtilError() << "Using already exsited spp service info";
+            found = true;
+            a_registered_callback( ele.port_number );
+            break;
         }
     }
-    spp_base_sdp_record->set_service_class_id_list( service_uuids );
 
-    std::vector<protocol_descriptor> desc_list;
-    protocol_descriptor desc_;
-    desc_.m_uuid = uuid::from_16bit( sdp_service_uuid::l2cap );
-    desc_list.push_back( desc_ );
-    desc_.m_uuid = uuid::from_16bit( sdp_service_uuid::rfcomm );
-    sdp_data_element paras;
-    paras.set_uint8_value( port_used );
-    desc_.m_parameters.push_back( paras );
-    desc_list.push_back( desc_ );
-    spp_base_sdp_record->set_protocol_descriptor_list( desc_list );
+    if( found )
+    {
+        return;
+    }
 
-    std::vector<sdp_data_element> profile_desc;
-    paras.set_uuid( uuid::from_16bit( sdp_service_uuid::serial_port ) );
-    profile_desc.push_back( paras );
-    paras.set_uint16_value( 0x0102 );
-    profile_desc.push_back( paras );
-    spp_base_sdp_record->set_bluetooth_profile_descriptor_list( profile_desc );
+    local_spp_service_info info;
+    info.port_number = 0;
+    info.sdp_service_recode_handle = 0;
+    info.service_name = a_name;
+    info.uuids = a_uuids;
+    m_local_spp_services.push_back( info );
 
-    spp_base_sdp_record->set_default_language();
+    rfcomm_port_callback_block cb;
+    cb.port_number = 0;
+    cb.is_local_port = true;
+    cb.handle_module = s_spp_module_name;
+    cb.connection_changed_callback = std::bind( &spp_module::handle_connection_changed,
+        this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, false );
+    cb.connection_request_callback = std::bind( &spp_module::handle_connection_request,
+        this, std::placeholders::_1, std::placeholders::_2 );
+    cb.data_callback = std::bind( &spp_module::handle_sdu, this, std::placeholders::_1,
+        std::placeholders::_2, std::placeholders::_3,
+        std::placeholders::_4, std::placeholders::_5, false );
 
-    paras.set_string_value( a_name );
-    spp_base_sdp_record->set_attribute
-        (
-        attribute_id_offset_for_string::provider_name_offset + language_base_id::english,
-        paras
-        );
-
-    std::shared_ptr<sdp_task_register_service_record> tsk;
-    tsk = std::make_shared<sdp_task_register_service_record>();
-    tsk->m_callback_handle_module = get_name();
-    tsk->m_registered_callback = std::bind( &spp_module::handle_service_record_registered, this, std::placeholders::_1,
-        a_name, a_registered_callback, port_used, service_uuids );
+    auto tsk = std::make_shared<rfcomm_task_port_callback_operation>();
+    tsk->to_register = true;
+    tsk->port_callback = cb;
     tsk->set_source_module( get_name() );
-    tsk->set_target_module( sdp_module::s_sdp_module_name );
-    tsk->m_service_record = spp_base_sdp_record;
-
+    tsk->callback_module = get_name();
+    tsk->register_result_callback = std::bind( &spp_module::handle_rfcomm_port_registered, this,
+        a_name, std::placeholders::_1, a_uuids, a_registered_callback );
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 }
 

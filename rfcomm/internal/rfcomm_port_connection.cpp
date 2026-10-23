@@ -236,7 +236,7 @@ void rfcomm_port_idle_state::on_enter()
             {
                 std::function<void()> fun;
                 fun = std::bind( callback_cb->connection_changed_callback, get_port().m_remote_device,
-                    connection_status::disconnected );
+                    connection_status::disconnected, get_port().get_port() );
                 std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
                 task->set_fun( fun, callback_cb->handle_module );
                 task->set_source_module( rfcomm_module::s_rfcomm_module_name );
@@ -245,7 +245,7 @@ void rfcomm_port_idle_state::on_enter()
             else
             {
                 callback_cb->connection_changed_callback( get_port().m_remote_device,
-                    connection_status::disconnected );
+                    connection_status::disconnected, get_port().get_port() );
             }
         }
         get_port().clear();
@@ -315,7 +315,7 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                     if( !callback->handle_module.empty() )
                     {
                         std::function<void()> fun;
-                        fun = std::bind( callback->connection_request_callback, get_port().m_remote_device );
+                        fun = std::bind( callback->connection_request_callback, get_port().m_remote_device, get_port().get_port() );
 
                         std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
                         task->set_fun( fun, callback->handle_module );
@@ -324,7 +324,7 @@ bool rfcomm_port_wait_sabm_state::handle_event( std::shared_ptr<state_machine::a
                     }
                     else
                     {
-                        callback->connection_request_callback( get_port().m_remote_device );
+                        callback->connection_request_callback( get_port().m_remote_device, get_port().get_port() );
                     }
                 }
                 else
@@ -1153,7 +1153,7 @@ void rfcomm_port_open_state::on_enter()
             {
                 std::function<void()> fun;
                 fun = std::bind( callback_cb->connection_changed_callback, get_port().m_remote_device,
-                    connection_status::connected );
+                    connection_status::connected, get_port().get_port() );
                 std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
                 task->set_fun( fun, callback_cb->handle_module );
                 task->set_source_module( rfcomm_module::s_rfcomm_module_name );
@@ -1162,7 +1162,7 @@ void rfcomm_port_open_state::on_enter()
             else
             {
                 callback_cb->connection_changed_callback( get_port().m_remote_device,
-                    connection_status::connected );
+                    connection_status::connected, get_port().get_port() );
             }
         }
     }
@@ -1355,7 +1355,7 @@ void rfcomm_port_connection::handle_received_uih_data_internal
             {
                 std::function<void()> fun;
                 fun = std::bind( m_port_callback->data_callback, a_hci_data, a_header.header_size(),
-                    a_header.get_information_length(), m_remote_device );
+                    a_header.get_information_length(), m_remote_device, get_port() );
                 std::shared_ptr<executable_task> task = std::make_shared<executable_task>();
                 task->set_fun( fun, m_port_callback->handle_module );
                 task->set_source_module( rfcomm_module::s_rfcomm_module_name );
@@ -1364,7 +1364,7 @@ void rfcomm_port_connection::handle_received_uih_data_internal
             else
             {
                 m_port_callback->data_callback( a_hci_data, a_header.header_size(),
-                    a_header.get_information_length(), m_remote_device );
+                    a_header.get_information_length(), m_remote_device, get_port() );
             }
         }
         else

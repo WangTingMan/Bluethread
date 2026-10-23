@@ -56,7 +56,7 @@ public:
 
 private:
 
-    void register_callback( rfcomm_port_callback_block a_callback );
+    bool register_callback( rfcomm_port_callback_block a_callback, uint8_t& a_port_used );
 
     void handle_connect_request( std::shared_ptr<connection_request> const& a_request );
 
@@ -117,6 +117,10 @@ private:
         bool a_is_local_port,
         bluetooth_address a_peer_address
         );
+
+    uint8_t get_next_available_port_number();
+
+    bool port_register_as_local( uint8_t a_port );
 
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_working_multipexer;
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_idle_multipexer;

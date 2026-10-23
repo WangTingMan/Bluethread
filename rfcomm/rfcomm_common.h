@@ -65,15 +65,17 @@ struct rfcomm_port_callback_block
      * If @ref is_local_port is false (port resides on remote device),
      * this callback will never be called.
      * Parameter: remote peer bluetooth address.
+     * @param uint8_t port number
      */
-    std::function<void( bluetooth_address )> connection_request_callback;
+    std::function<void( bluetooth_address, uint8_t )> connection_request_callback;
 
     /**
      * Callback for RFCOMM port connection status change events.
      * @param bluetooth_address Remote peer address
      * @param connection_status New connection state of this port
+     * @param uint8_t port number
      */
-    std::function<void( bluetooth_address, connection_status )> connection_changed_callback;
+    std::function<void( bluetooth_address, connection_status, uint8_t )> connection_changed_callback;
 
     /**
      * Received remote user data from remote device.
@@ -81,8 +83,9 @@ struct rfcomm_port_callback_block
      * @param uint32_t Offset to the start of user data inside raw hci data
      * @param uint32_t Total user data size
      * @param bluetooth_address Peer device sending this user data
+     * @param uint8_t port number
      */
-    std::function<void( std::shared_ptr<hci_data>, uint32_t, uint32_t, bluetooth_address )> data_callback;
+    std::function<void( std::shared_ptr<hci_data>, uint32_t, uint32_t, bluetooth_address, uint8_t )> data_callback;
 };
 
 }

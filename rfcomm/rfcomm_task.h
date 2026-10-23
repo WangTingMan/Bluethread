@@ -136,6 +136,8 @@ public:
 
     bool to_register = true;
     rfcomm_port_callback_block port_callback;
+    std::function<void( uint8_t )> register_result_callback;
+    std::string callback_module;
 };
 
 }

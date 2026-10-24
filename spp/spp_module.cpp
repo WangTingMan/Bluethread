@@ -217,6 +217,7 @@ void spp_module::handle_rfcomm_port_registered
     tsk->m_registered_callback = [this, a_uuids, port_used, a_registered_callback]( uint32_t a_sdp_service_record_handle )
         {
             bool found = false;
+            LogUtilDebug() << "sdp service record registeration done. handle is " << a_sdp_service_record_handle;
             for( auto& ele : m_local_spp_services )
             {
                 if( ele.uuids == a_uuids )
@@ -230,6 +231,7 @@ void spp_module::handle_rfcomm_port_registered
 
             if( found && a_registered_callback )
             {
+                LogUtilDebug() << "notify upper layer that the rfcomm port registered";
                 a_registered_callback( port_used );
             }
         };
@@ -297,12 +299,12 @@ void spp_module::handle_connection_changed
     (
     bluetooth_address a_address,
     connection_status a_status,
-    uint8_t a_port,
-    bool a_local_inited
+    uint8_t           a_port,
+    bool              a_local_inited
     )
 {
     LogUtilInfo() << "remote " << a_address.to_string() << ", port: " << static_cast< uint32_t >( a_port )
-        << ", status: " << a_status;
+        << ( a_local_inited ? ", local inited" : ", remote inited" ) << ", status: " << a_status;
 
     std::vector<uuid> local_uuid;
     bool found = false;
@@ -658,9 +660,6 @@ void spp_module::connect
     if( !spp_conn )
     {
         spp_conn = std::make_shared<spp_connection>();
-        spp_conn->set_remote_device( a_address );
-        spp_conn->set_uuid( uuids );
-        spp_conn->set_local_inited( true );
         m_connections.push_back( spp_conn );
     }
 
@@ -672,6 +671,11 @@ void spp_module::connect
         return;
     }
 
+    LogUtilInfo() << "Start to connect to defaule spp port with remote device " << a_address.to_string();
+
+    spp_conn->set_remote_device( a_address );
+    spp_conn->set_uuid( uuids );
+    spp_conn->set_local_inited( true );
     spp_conn->set_connection_status( connection_status::connecting );
 
     std::shared_ptr<sdp_task_service_search_attribute> tsk;
@@ -692,7 +696,6 @@ void spp_module::connect
         };
 
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
-    LogUtilInfo() << "Connect to defaule spp port with remote device " << a_address.to_string();
 }
 
 void spp_module::send_port_data

@@ -222,8 +222,8 @@ bool rfcomm_module::register_callback( rfcomm_port_callback_block a_callback, ui
     uint8_t port_used = a_callback.port_number;
     if( 0x00 == a_callback.port_number || port_register_as_local( a_callback.port_number ) )
     {
-        LogUtilDebug() << "allocate a new port for this";
         port_used = get_next_available_port_number();
+        LogUtilDebug() << "allocate a new port number for this registeration: " << uint16_t( port_used );
         if( port_used == 0x00 )
         {
             LogUtilDebug() << "allocate a new port faild";

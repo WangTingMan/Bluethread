@@ -1144,6 +1144,9 @@ void rfcomm_port_open_state::handle_multipexer_message( std::shared_ptr<multipex
 
 void rfcomm_port_open_state::on_enter()
 {
+    LogUtilDebug() << "remote: " << get_port().m_remote_device.to_string()
+        << ", port: " << (uint16_t)get_port().get_port() << ", enter open state";
+
     auto& callback_cb = get_port().m_port_callback;
     if( callback_cb )
     {

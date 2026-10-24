@@ -33,6 +33,8 @@
 namespace bluetooth
 {
 
+class spp_sdp_service_attribute_search_result_task;
+
 class spp_module : public framework::abstract_module
 {
 

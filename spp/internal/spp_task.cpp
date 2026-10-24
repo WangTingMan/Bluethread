@@ -16,6 +16,7 @@
 
 #include "spp/spp_module.h"
 #include "spp/spp_task.h"
+#include "internal_spp_task.h"
 
 namespace bluetooth
 {

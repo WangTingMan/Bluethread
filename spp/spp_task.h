@@ -130,24 +130,9 @@ public:
 
     bluetooth_address m_address;
     uint8_t m_port = 0x00;
-    bool m_port_on_local = false;
+    bool is_local_inited_port_connection = false;
     std::shared_ptr<std::vector<uint8_t>> m_spp_data; // Only spp user data without any protocol header
 };
-
-class spp_sdp_service_attribute_search_result_task : public spp_task
-{
-
-public:
-
-    spp_sdp_service_attribute_search_result_task();
-
-    sdp_search_result result = sdp_search_result::sdp_search_failed;
-    bluetooth_address address;
-    std::vector<uuid> uuids;
-    std::vector<sdp_data_element> service_record_list;
-    std::shared_ptr<spp_connection> spp_conn;
-};
-
 
 }
 

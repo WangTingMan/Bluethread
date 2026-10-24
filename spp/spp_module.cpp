@@ -30,6 +30,7 @@
 #include "sdp/sdp_task.h"
 #include "spp/spp_task.h"
 #include "spp/spp_sdp_utils.h"
+#include "internal/internal_spp_task.h"
 
 namespace bluetooth
 {
@@ -102,7 +103,7 @@ void spp_module::handle_task( std::shared_ptr<abstract_task> a_task )
         {
             auto detail_task = static_pointer_cast<spp_async_send_spp_data_task>( _spp_task );
             send_port_data( detail_task->m_address, detail_task->m_port,
-                detail_task->m_port_on_local, std::move( detail_task->m_spp_data ) );
+                detail_task->is_local_inited_port_connection, std::move( detail_task->m_spp_data ) );
         }
         break;
     case spp_task_type::spp_sdp_service_attribute_search_result:
@@ -638,7 +639,8 @@ void spp_module::disconnect
             task->set_target_module( rfcomm_module::s_rfcomm_module_name );
             ele->set_connection_status( connection_status::disconnecting );
 
-            bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+            bluetooth::framework_manager::get_instance().get_thread_manager()
+                .post_task( task, framework::source_here );
         }
     }
 }

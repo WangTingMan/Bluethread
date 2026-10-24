@@ -86,7 +86,14 @@ void disconnect( bluetooth_address a_address );
 
 void connect( bluetooth_address a_address );
 
-void send( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local, uint8_t* a_buffer, uint32_t a_size );
+void send
+    (
+    bluetooth_address a_address,
+    uint8_t a_port,
+    bool is_local_inited_port_connection,
+    uint8_t* a_buffer,
+    uint32_t a_size
+    );
 
 }
 
@@ -370,13 +377,20 @@ void connect( bluetooth_address a_address )
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
-void send( bluetooth_address a_address, uint8_t a_port, bool a_port_on_local, uint8_t* a_buffer, uint32_t a_size )
+void send
+    (
+    bluetooth_address a_address,
+    uint8_t a_port,
+    bool a_is_local_inited_port_connection,
+    uint8_t* a_buffer,
+    uint32_t a_size
+    )
 {
     std::shared_ptr<bluetooth::spp_async_send_spp_data_task> task;
     task = std::make_shared<bluetooth::spp_async_send_spp_data_task>();
     task->m_address = a_address;
     task->m_port = a_port;
-    task->m_port_on_local = a_port_on_local;
+    task->is_local_inited_port_connection = a_is_local_inited_port_connection;
     std::shared_ptr<std::vector<uint8_t>> spp_data = std::make_shared<std::vector<uint8_t>>();
     spp_data->assign( a_buffer, a_buffer + a_size );
     task->m_spp_data = std::move( spp_data );

@@ -1,3 +1,5 @@
+> English | [简体中文](./README.zh-CN.md)
+
 # Introduction of Bluetooth Protocol Stack
 
 ## Overview
@@ -31,6 +33,7 @@ All protocol events, incoming HCI packets and state machine transitions are wrap
 
 ## Key Features
 
+- **Completed modules: full SDP, L2CAP, RFCOMM and SPP implementation; basic GAP functions including pairing handling and device discoverability configuration.**
 - Dual-mode support for BR/EDR and BLE.
 - Full L2CAP signaling implementation: CONNECTION_REQ, configuration negotiation, QoS, extended flow specification, retransmission & flow control option parsing.
 - Robust packet parser with malformed packet validation, truncated payload detection and proper rejection for invalid signaling to defend against abnormal remote packets.

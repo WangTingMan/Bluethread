@@ -14,12 +14,15 @@
  * Commercial closed-source licenses are available upon request.
  */
 #include "endian_convert.h"
+#include "internal_sdp_task.h"
 #include "sdp_connection.h"
 #include "sdp_manager.h"
 #include "sdp/sdp_module.h"
 #include "l2cap/l2cap_task.h"
+#include "common/acl_connections_db.h"
 
 #include <framework/framework_manager.h>
+#include <framework/information_manager.h>
 #include <framework/log_util.h>
 
 namespace bluetooth
@@ -68,6 +71,61 @@ sdp_connection::~sdp_connection()
         auto _timer_module = std::static_pointer_cast<framework::timer_module>( _module );
         _timer_module->undregister_timer( m_connection_status_watch_timer );
         m_connection_status_watch_timer = 0;
+    }
+
+    auto acl_db = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<acl_connections_db>( acl_connections_db::s_acl_connections_db_name );
+    auto [address, has] = acl_db->get_address( m_acl_handle );
+
+    if( m_current_pending_request_initor )
+    {
+        auto sdp_tsk = std::make_shared<sdp_task_pending>();
+        sdp_tsk->m_pending_request = m_current_pending_request_initor;
+        m_pending_tasks.push_back( sdp_tsk );
+    }
+
+    if( m_pending_tasks.empty() )
+    {
+        return;
+    }
+
+    std::vector<std::shared_ptr<pending_request>> dropped_pending_tasks;
+    if( has )
+    {
+        auto reschedule_tsk = std::make_shared<sdp_task_resume_pending_sdp_tasks>();
+        for( auto& ele : m_pending_tasks )
+        {
+            if( ele->m_pending_type != pending_type::sdp_task_pending_type )
+            {
+                continue;
+            }
+
+            auto sdp_task = std::static_pointer_cast<sdp_task_pending>( ele );
+            sdp_task->m_reschedule_times++;
+            /*Max retry reschedule count limited to 5 for the moment.*/
+            if( sdp_task->m_reschedule_times < 5 )
+            {
+                reschedule_tsk->m_pending_tasks.push_back( sdp_task );
+            }
+            else
+            {
+                dropped_pending_tasks.push_back( sdp_task );
+            }
+        }
+        reschedule_tsk->m_remote_address = m_address;
+
+        LogUtilDebug() << "Reschedule pending SDP cached tasks after unexpected SDP channel disconnection";
+        framework::framework_manager::get_instance().get_thread_manager()
+            .post_task( reschedule_tsk, framework::source_here );
+    }
+    else
+    {
+        dropped_pending_tasks.insert( dropped_pending_tasks.end(), m_pending_tasks.begin(), m_pending_tasks.end() );
+    }
+
+    if( dropped_pending_tasks.size() > 0 )
+    {
+        LogUtilError() << "need notify connection may failed.";
     }
 }
 
@@ -160,6 +218,7 @@ void sdp_connection::search_service_attribute( std::shared_ptr<sdp_task_service_
         auto sdp_tsk = std::make_shared<sdp_task_pending>();
         sdp_tsk->m_pending_request = a_service_search;
         m_pending_tasks.push_back( sdp_tsk );
+        LogUtilDebug() << "sdp channel not connected, so pending this task";
         return;
     }
 
@@ -242,6 +301,17 @@ void sdp_connection::clear_due_to_connection_timeout()
             LogUtilDebug() << "pending task ignored due to connection timeout";
             break;
         }
+    }
+}
+
+void sdp_connection::assign_pending_tasks( std::vector<std::shared_ptr<pending_request>> a_pending_tasks )
+{
+    LogUtilDebug() << "assigned pending tasks: " << a_pending_tasks.size();
+    m_pending_tasks.insert( m_pending_tasks.end(), a_pending_tasks.begin(), a_pending_tasks.end() );
+    if( !m_current_pending_request &&
+        m_connection_status == connection_status::connected )
+    {
+        process_next_pending_request();
     }
 }
 
@@ -727,6 +797,7 @@ void sdp_connection::sdp_channel_idle_check()
 
 void sdp_connection::process_next_pending_request()
 {
+    LogUtilDebug() << "process next panding request";
     if( m_pending_tasks.empty() )
     {
         return;

@@ -32,10 +32,15 @@ namespace bluetooth
 enum class sdp_task_type : uint8_t
 {
     invalid_type = 0x00,
-    register_service_record = 0x01, // Request SDP module register a new service record into service
+    register_service_record  = 0x01, // Request SDP module register a new service record into service
                                     // record database.
-    service_search_request = 0x02,  // execute service search transaction.
+    service_search_request   = 0x02,  // execute service search transaction.
     service_search_attribute = 0x03, // execute service search attribute request
+    /**
+    * Reschedule pending SDP cached tasks after unexpected SDP channel disconnection,
+    * so these unfinished tasks can be re-processed.
+    */
+    resume_pending_sdp_tasks = 0x04,
 };
 
 class sdp_task : public framework::abstract_task

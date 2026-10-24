@@ -120,7 +120,12 @@ private:
 
     uint8_t get_next_available_port_number();
 
-    bool port_register_as_local( uint8_t a_port );
+    /**
+     * Check whether the specified local RFCOMM listening port is already occupied.
+     * @param port RFCOMM local listening port number to check
+     * @return true if occupied; false otherwise
+     */
+    bool is_local_listen_port_occupied( uint8_t a_port );
 
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_working_multipexer;
     std::vector<std::shared_ptr<rfcomm_multipexer>> m_idle_multipexer;

@@ -14,6 +14,7 @@
  * Commercial closed-source licenses are available upon request.
  */
 
+#include "internal_sdp_task.h"
 #include "sdp_manager.h"
 
 #include "framework/log_util.h"
@@ -461,6 +462,37 @@ void sdp_manager::do_service_search_attribute( std::shared_ptr<sdp_task> const& 
         sdp_conn->set_is_local_sdp_initiator();
     }
     conn_->search_service_attribute( detail_tsk );
+}
+
+void sdp_manager::do_resume_pending_sdp_tasks( std::shared_ptr<sdp_task> const& a_task )
+{
+    LogUtilDebug() << "Reschedule pending SDP cached tasks after unexpected SDP channel disconnection";
+    auto detail_tsk = std::static_pointer_cast<sdp_task_resume_pending_sdp_tasks>( a_task );
+
+    auto conn_ = find_connection( detail_tsk->m_remote_address );
+    if( !conn_ )
+    {
+        LogUtilDebug() << "there is no sdp connection for device " << detail_tsk->m_remote_address.to_string()
+            << ", so we need ask L2CAP module to make one";
+        std::shared_ptr<l2cap_task_connection_request> tsk;
+        tsk = std::make_shared<l2cap_task_connection_request>();
+        tsk->m_remote_device = detail_tsk->m_remote_address;
+        tsk->m_psm = defined_l2cap_psm::sdp;
+        tsk->set_source_module( sdp_module::s_sdp_module_name );
+        tsk->set_position( source_here );
+
+        framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
+
+        std::shared_ptr<sdp_connection> sdp_conn = std::make_shared<sdp_connection>( this );
+        sdp_conn->m_address = detail_tsk->m_remote_address;
+        sdp_conn->set_connection_status( connection_status::connecting );
+        m_connections.push_back( sdp_conn );
+        conn_ = sdp_conn;
+        sdp_conn->set_is_local_sdp_initiator();
+        set_sdp_channel_idle_check_timer();
+    }
+
+    conn_->assign_pending_tasks( std::move( detail_tsk->m_pending_tasks ) );
 }
 
 void sdp_manager::send_packet

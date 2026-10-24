@@ -217,16 +217,29 @@ void rfcomm_module::handle_event( std::shared_ptr<framework_event> a_event )
 bool rfcomm_module::register_callback( rfcomm_port_callback_block a_callback, uint8_t& a_port_used )
 {
     LogUtilDebug() << "register port callback for port: " << (uint16_t)a_callback.port_number
-        << ( a_callback.is_local_port ? " local port" : " remote port" );
+        << ( a_callback.is_local_port ? " local port" : " remote port, from " )
+        << ( a_callback.is_local_port ? "" : a_callback.remote_address.to_string() );
     a_port_used = 0;
     uint8_t port_used = a_callback.port_number;
-    if( 0x00 == a_callback.port_number || port_register_as_local( a_callback.port_number ) )
+    if( a_callback.is_local_port )
     {
-        port_used = get_next_available_port_number();
-        LogUtilDebug() << "allocate a new port number for this registeration: " << uint16_t( port_used );
-        if( port_used == 0x00 )
+        if( 0x00 == a_callback.port_number ||
+            is_local_listen_port_occupied( a_callback.port_number ) )
         {
-            LogUtilDebug() << "allocate a new port faild";
+            port_used = get_next_available_port_number();
+            LogUtilDebug() << "allocate a new port number for this registeration: " << uint16_t( port_used );
+            if( port_used == 0x00 )
+            {
+                LogUtilDebug() << "allocate a new port faild";
+                return false;
+            }
+        }
+    }
+    else
+    {
+        if( a_callback.port_number > 30 || a_callback.port_number == 0x00 )
+        {
+            LogUtilError() << "invalid port number";
             return false;
         }
     }
@@ -703,7 +716,7 @@ std::shared_ptr<rfcomm_port_callback_block> rfcomm_module::find_port_callback
 uint8_t rfcomm_module::get_next_available_port_number()
 {
     uint8_t port = framework::get_real_random( 1, 30 );
-    bool found = port_register_as_local( port );
+    bool found = is_local_listen_port_occupied( port );
     if( !found )
     {
         return port;
@@ -712,7 +725,7 @@ uint8_t rfcomm_module::get_next_available_port_number()
     port = 0;
     for( int i = 1; i < 31; ++i )
     {
-        found = port_register_as_local( i );
+        found = is_local_listen_port_occupied( i );
         if( !found )
         {
             port = i;
@@ -723,8 +736,14 @@ uint8_t rfcomm_module::get_next_available_port_number()
     return port;
 }
 
-bool rfcomm_module::port_register_as_local( uint8_t a_port )
+bool rfcomm_module::is_local_listen_port_occupied( uint8_t a_port )
 {
+    if( a_port > 30 || a_port == 0 )
+    {
+        /* we cannot use port 31 or bigger one. */
+        return true;
+    }
+
     for( auto& cb : m_port_callbacks )
     {
         if( !cb->is_local_port )

@@ -54,6 +54,7 @@ struct sdp_task_pending : public pending_request
         m_pending_type = pending_type::sdp_task_pending_type;
     }
 
+    uint32_t m_reschedule_times = 0;
     std::shared_ptr<sdp_task> m_pending_request;
     std::shared_ptr<sdp_protocol_base> m_protocol_msg;
 };
@@ -196,6 +197,8 @@ public:
     void search_service_by_handle( uint32_t a_handle );
 
     void clear_due_to_connection_timeout();
+
+    void assign_pending_tasks( std::vector<std::shared_ptr<pending_request>> a_pending_tasks );
 
 public:
 

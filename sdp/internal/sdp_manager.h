@@ -75,6 +75,8 @@ public:
      */
     void do_service_search_attribute( std::shared_ptr<sdp_task> const& a_task );
 
+    void do_resume_pending_sdp_tasks( std::shared_ptr<sdp_task> const& a_task );
+
     void send_packet
         (
         std::shared_ptr<sdp_protocol_base> const& a_packet,

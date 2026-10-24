@@ -26,6 +26,8 @@
 
 #include "../common/state_machine.h"
 
+#include <framework/log_util.h>
+
 namespace bluetooth
 {
 
@@ -347,7 +349,8 @@ public:
 
     uint8_t get_port()const
     {
-        return m_dlci >> 1;
+        uint8_t port_number = m_dlci >> 1;
+        return port_number;
     }
 
     /**

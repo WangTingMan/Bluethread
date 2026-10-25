@@ -38,10 +38,10 @@ enum
     serial_port_profile = 0x01,
 };
 
-struct BLUETOOTH_EXPORT bluetooth_interface
+struct BLUETOOTH_EXPORT bluetooth_api_interface
 {
 
-    std::uint32_t size = sizeof( bluetooth_interface );
+    std::uint32_t size = sizeof( bluetooth_api_interface );
 
     void (*enable)();
 
@@ -124,4 +124,4 @@ struct sdp_profile_interface
     void (*search_service)( bluetooth_address a_address, std::vector<bluetooth::uuid> a_uuids );
 };
 
-BLUETOOTH_EXPORT bluetooth_interface* get_bt_interface();
+BLUETOOTH_EXPORT bluetooth_api_interface* get_bt_interface();

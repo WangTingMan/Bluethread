@@ -33,7 +33,7 @@
 #include <string>
 #include <future>
 
-bluetooth_interface s_interface;
+bluetooth_api_interface s_interface;
 serial_port_interface s_serial_port_interface;
 sdp_profile_interface s_sdp_interface;
 
@@ -102,9 +102,9 @@ namespace sdp
     void search_service( bluetooth_address a_address, std::vector<bluetooth::uuid> a_uuids );
 }
 
-bluetooth_interface* get_bt_interface()
+bluetooth_api_interface* get_bt_interface()
 {
-    static bluetooth_interface* s_inter = nullptr;
+    static bluetooth_api_interface* s_inter = nullptr;
     if( !s_inter )
     {
         // to do thread safe problem may here

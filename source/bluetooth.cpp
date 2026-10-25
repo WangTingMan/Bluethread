@@ -269,6 +269,7 @@ namespace serial_port
 
 uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
 {
+    LogUtilDebug() << "register SPP service. name: " << parameter.service_name;
     uint8_t ret = 0;
     std::vector<bluetooth::uuid> uuids;
     auto p_uuid = parameter.uuids;
@@ -294,6 +295,7 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
     auto future_ = promise_->get_future();
     auto fun = [promise_]( uint8_t a_port )mutable
     {
+        LogUtilDebug() << "register completed. the detail port is: " << (uint32_t)a_port;
         promise_->set_value( a_port );
     };
 
@@ -303,6 +305,7 @@ uint8_t register_service( bluetooth::serial_port_register_parameters parameter )
     future_.wait();
     ret = future_.get();
 
+    LogUtilDebug() << "register completed. the detail port is: " << (uint32_t)ret;
     return ret;
 }
 

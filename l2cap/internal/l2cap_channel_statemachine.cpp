@@ -1432,10 +1432,6 @@ l2cap_channel_statemachine::l2cap_channel_statemachine()
         static_cast< uint32_t >( l2cap_channel_state_type::wait_config_rsp ) );
     add_state( state_ );
 
-    state_ = std::make_shared<l2cap_channel_wait_config_rsp_state>( *this,
-        static_cast< uint32_t >( l2cap_channel_state_type::wait_config_rsp ) );
-    add_state( state_ );
-
     state_ = std::make_shared<l2cap_channel_open_state>( *this,
         static_cast< uint32_t >( l2cap_channel_state_type::open ) );
     add_state( state_ );

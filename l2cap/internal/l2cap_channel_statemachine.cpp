@@ -1618,7 +1618,7 @@ void l2cap_channel_statemachine::handle_disconnect_request( std::shared_ptr<l2ca
         else
         {
             LogUtilError() << "cast to l2cap_channel_base_state failed";
-            transition_to( static_cast<uint32_t>( l2cap_channel_state_type::close_state ) );
+            force_transition_to_close( source_here );
         }
         m_signaling_channel->send_disconnect_response( a_request->m_identifier,
             a_request->m_destination_cid, a_request->m_source_cid );
@@ -1652,6 +1652,17 @@ void l2cap_channel_statemachine::send_upper_sdu( std::shared_ptr<hci_data> const
     header.to_raw_buffer( a_hci_data->m_buffer.data(), header.header_size() );
 
     handle_event( event_ );
+}
+
+void l2cap_channel_statemachine::force_transition_to_close( framework::source_position a_position )
+{
+    LogUtilWarning() << "require force transfer to close state: " << a_position.to_string();
+    auto current_state = find_state( get_current_state_id() );
+    if( current_state )
+    {
+        auto detail_state = std::static_pointer_cast<l2cap_channel_base_state>( current_state );
+        detail_state->transition_to_state( l2cap_channel_state_type::close_state );
+    }
 }
 
 void l2cap_channel_statemachine::send_completed_acl_packet( std::shared_ptr<hci_data> const& a_hci_data )

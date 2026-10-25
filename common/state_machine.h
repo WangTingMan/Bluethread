@@ -236,6 +236,8 @@ public:
             make_params_pointer_vector( std::forward<Args>( args )... ) );
     }
 
+protected:
+
     std::shared_ptr<abstract_state> find_state( uint32_t a_state_id )
     {
         auto it = m_states.find( a_state_id );

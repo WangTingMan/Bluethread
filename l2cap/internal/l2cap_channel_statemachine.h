@@ -18,6 +18,7 @@
 #include "../common/state_machine.h"
 #include "../l2cap_common.h"
 #include "l2cap_signaling.h"
+#include "framework/abstract_task.h"
 
 namespace bluetooth
 {
@@ -431,6 +432,8 @@ public:
      * Send upper layer sdu to remote device
      */
     void send_upper_sdu( std::shared_ptr<hci_data> const& a_hci_data );
+
+    void force_transition_to_close( framework::source_position a_position );
 
 private:
 

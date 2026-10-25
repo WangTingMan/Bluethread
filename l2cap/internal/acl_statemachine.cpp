@@ -499,7 +499,7 @@ namespace bluetooth
         {
             LogUtilInfo() << "Force transition channel to close_state due to remote INVALID_CID, local cid: "
                 << a_tsk->m_local_cid << ", remote cid: " << a_tsk->m_remote_cid;
-            channel->transition_to( (uint32_t)l2cap_channel_state_type::close_state );
+            channel->force_transition_to_close( source_here );
 
             for( auto it = m_channel_machines.begin(); it != m_channel_machines.end(); ++it )
             {

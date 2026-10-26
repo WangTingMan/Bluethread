@@ -127,6 +127,7 @@ public:
     }
 
     std::u8string m_localname;
+    std::function<void()> m_local_name_changed_done_cb;
 };
 
 class gap_tsk_make_edr_acl_connection : public gap_module_task

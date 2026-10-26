@@ -114,6 +114,7 @@ private:
     enable_status m_connectable = enable_status::unknown;
     enable_status m_discoverable = enable_status::unknown;
     pairing_manager m_pairing_manager;
+    std::function<void()> m_local_name_set_done;
     std::vector<acl_connection_cb> m_acl_cb;
 };
 

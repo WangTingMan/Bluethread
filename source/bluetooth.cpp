@@ -25,6 +25,7 @@
 #include "sdp/sdp_module.h"
 #include "sdp/sdp_task.h"
 #include "spp/spp_task.h"
+#include "common/controller.h"
 
 #include "framework/framework_manager.h"
 #include "framework/framework_event.h"
@@ -228,12 +229,22 @@ void set_visiblility( bool a_discoverable, bool a_connectable )
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
+void report_local_name_changed()
+{
+    auto cb = bluetooth::stack_manager::get_instance().get_stack_callback();
+    auto con = framework::framework_manager::get_instance().get_info_manager()
+        .get_detail_information<bluetooth::controller>( bluetooth::controller::s_information_name );
+    std::u8string name = con->get_local_name();
+    cb( bluetooth::service_type::not_specified, bluetooth::function_type::local_name_changed, (void*)name.c_str() );
+}
+
 void set_local_name( std::u8string a_name )
 {
     LogUtilInfo() << "Change local name to " << (char*)( a_name.c_str());
     std::shared_ptr<bluetooth::gap_tsk_change_local_name> task;
     task = std::make_shared<bluetooth::gap_tsk_change_local_name>();
     task->m_localname = a_name;
+    task->m_local_name_changed_done_cb = std::bind( &report_local_name_changed );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 

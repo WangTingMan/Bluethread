@@ -134,7 +134,8 @@ bool controller::update_controller_support_cmd( hci_command a_cmd, bool a_suppor
 
 void controller::set_local_name( std::u8string a_name )
 {
-
+    std::shared_lock<std::shared_mutex> locker( m_mutex );
+    m_local_name = a_name;
 }
 
 void controller::update_lmp_ext_features( uint8_t a_page, std::vector<uint8_t> a_support_features )

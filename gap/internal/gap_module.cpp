@@ -124,6 +124,7 @@ void gap_module::handle_task( std::shared_ptr<abstract_task> a_task )
         case gap_task_type::change_local_name:
             {
                 auto detail_tsk = std::static_pointer_cast<gap_tsk_change_local_name>( task );
+                m_local_name_set_done = detail_tsk->m_local_name_changed_done_cb;
                 changed_local_name( detail_tsk->m_localname );
             }
             break;
@@ -560,6 +561,10 @@ void gap_module::handle_cmd_completed_event( std::shared_ptr<hci_data> const& a_
     {
         uint8_t status = a_hci_event->m_buffer[5];
         LogUtilInfo() << "Write local name: " << ( 0x00 == status ? "success" : "failed" );
+        if( m_local_name_set_done )
+        {
+            m_local_name_set_done();
+        }
     }
         break;
     default:

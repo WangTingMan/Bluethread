@@ -19,6 +19,7 @@
 #include "uuid.h"
 #include "stack/stack_manager.h"
 #include "gap/gap_module.h"
+#include "gap/gap_tasks.h"
 #include "spp/spp_module.h"
 #include "rfcomm/rfcomm_module.h"
 #include "sdp/sdp_module.h"
@@ -190,55 +191,49 @@ void* get_profile_interface( profile_type a_profile )
 
 void set_discoverable( bool a_discoverable )
 {
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
+    std::shared_ptr<bluetooth::gap_base_settings_task> task;
+    task = std::make_shared<bluetooth::gap_base_settings_task>();
     if( a_discoverable )
     {
-        task->m_gap_task_type = bluetooth::gap_module::gap_task_type::to_discoverable;
+        task->m_base_setting = bluetooth::gap_base_settings_type::to_discoverable;
     }
     else
     {
-        task->m_gap_task_type = bluetooth::gap_module::gap_task_type::to_nondiscoverable;
+        task->m_base_setting = bluetooth::gap_base_settings_type::to_nondiscoverable;
     }
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void set_connectable( bool a_connectable )
 {
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
+    std::shared_ptr<bluetooth::gap_base_settings_task> task;
+    task = std::make_shared<bluetooth::gap_base_settings_task>();
     if( a_connectable )
     {
-        task->m_gap_task_type = bluetooth::gap_module::gap_task_type::to_connectable;
+        task->m_base_setting = bluetooth::gap_base_settings_type::to_connectable;
     }
     else
     {
-        task->m_gap_task_type = bluetooth::gap_module::gap_task_type::to_disconnectable;
+        task->m_base_setting = bluetooth::gap_base_settings_type::to_disconnectable;
     }
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void set_visiblility( bool a_discoverable, bool a_connectable )
 {
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
+    std::shared_ptr<bluetooth::gap_tsk_visibility_setting> task;
+    task = std::make_shared<bluetooth::gap_tsk_visibility_setting>();
     task->m_connectable = a_connectable;
     task->m_discoverable = a_discoverable;
-    task->m_gap_task_type = bluetooth::gap_module::gap_task_type::visibility_setting;
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void set_local_name( std::u8string a_name )
 {
     LogUtilInfo() << "Change local name to " << (char*)( a_name.c_str());
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
+    std::shared_ptr<bluetooth::gap_tsk_change_local_name> task;
+    task = std::make_shared<bluetooth::gap_tsk_change_local_name>();
     task->m_localname = a_name;
-    task->m_gap_task_type = bluetooth::gap_module::gap_task_type::change_local_name;
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
@@ -252,12 +247,12 @@ void disable_bt()
 
 void set_pairable( bool a_pairable )
 {
-    bluetooth::gap_module::gap_task_type type;
-    type = a_pairable ? bluetooth::gap_module::gap_task_type::to_pairable :
-        bluetooth::gap_module::gap_task_type::to_unpairable;
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
-    task->m_gap_task_type = type;
+    bluetooth::gap_base_settings_type base_setting;
+    base_setting = a_pairable ? bluetooth::gap_base_settings_type::to_pairable :
+        bluetooth::gap_base_settings_type::to_unpairable;
+    std::shared_ptr<bluetooth::gap_base_settings_task> task;
+    task = std::make_shared<bluetooth::gap_base_settings_task>();
+    task->m_base_setting = base_setting;
     task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }

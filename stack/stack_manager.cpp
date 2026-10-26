@@ -25,6 +25,7 @@
 #include "hci/controller_module.h"
 #include "l2cap/l2cap_module.h"
 #include "gap/gap_module.h"
+#include "gap/gap_tasks.h"
 #include "sdp/sdp_module.h"
 #include "rfcomm/rfcomm_module.h"
 #include "config/config_module.h"
@@ -100,30 +101,25 @@ void stack_manager::enable_bt()
 
 void stack_manager::search_device()
 {
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
-    task->m_gap_task_type = bluetooth::gap_module::gap_task_type::edr_inquiry;
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
+    std::shared_ptr<bluetooth::gap_base_settings_task> task;
+    task = std::make_shared<bluetooth::gap_base_settings_task>();
+    task->m_base_setting = bluetooth::gap_base_settings_type::edr_inquiry;
     bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void stack_manager::cancel_search_edr_device()
 {
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
-    task->m_gap_task_type = bluetooth::gap_module::gap_task_type::cancel_edr_inquiry;
-    task->set_target_module( bluetooth::gap_module::s_gap_module_name );
+    std::shared_ptr<bluetooth::gap_base_settings_task> task;
+    task = std::make_shared<bluetooth::gap_base_settings_task>();
+    task->m_base_setting = bluetooth::gap_base_settings_type::cancel_edr_inquiry;
     bluetooth::framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
 }
 
 void stack_manager::accept_ssp_confirm( bluetooth_address a_address, bool a_accept )
 {
-    bluetooth::gap_module::gap_task_type type = a_accept ?
-        bluetooth::gap_module::gap_task_type::accept_ssp_confirm :
-        bluetooth::gap_module::gap_task_type::reject_ssp_confirm;
-    std::shared_ptr<bluetooth::gap_module::gap_module_task> task;
-    task = std::make_shared<bluetooth::gap_module::gap_module_task>();
-    task->m_gap_task_type = type;
+    std::shared_ptr<bluetooth::gap_tsk_ssp_pairing_confirm_result> task;
+    task = std::make_shared<bluetooth::gap_tsk_ssp_pairing_confirm_result>();
+    task->m_accept = a_accept;
     task->m_address = a_address;
     task->set_target_module( bluetooth::gap_module::s_gap_module_name );
     framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );

@@ -15,12 +15,14 @@
  */
 
 #pragma once
-#include "../framework/abstract_module.h"
-#include "../framework/lendable_element.h"
-#include "../framework/abstract_task.h"
-#include "data_element.h"
+#include "framework/abstract_module.h"
+#include "framework/lendable_element.h"
+#include "framework/abstract_task.h"
 #include "common.h"
-#include "pairing_manager.h"
+#include "data_element.h"
+#include "gap_module.h"
+#include "gap_tasks.h"
+#include "internal/pairing_manager.h"
 
 #include <string>
 #include <vector>
@@ -42,50 +44,6 @@ class gap_module : public framework::abstract_module
 
 public:
 
-    enum class gap_task_type : uint8_t
-    {
-        invalid_type = 0x00,
-        power_on,
-        power_off,
-        hci_cmd_response, // m_hci_response and m_hci_cmd are valid
-        edr_inquiry,      // no other parameters need
-        cancel_edr_inquiry,
-        to_discoverable,  // no other parameters need
-        to_nondiscoverable,// no other parameters need
-        to_connectable,    // no other parameters need
-        to_disconnectable, // no other parameters need
-        visibility_setting, // m_connectable and m_discoverable are valid
-        read_visibility,   // read visiblity settings from chip
-        change_local_name, // m_localname is valid
-        hci_event,
-        to_unpairable,     // To unpairable mode. Stack will reject coming pairing request automatically
-        to_pairable,       // To pairabe mode. Stack will router coming pairing request
-        accept_ssp_confirm,// To accept ssp pairing confirm from device m_address
-        reject_ssp_confirm, // To reject ssp pairing confirm from device m_addres
-        make_edr_acl_connection, // To make one BR/EDR ACL connection
-    };
-
-    class gap_module_task : public framework::abstract_task
-    {
-
-    public:
-
-        gap_module_task()
-        {
-            set_target_module( s_gap_module_name );
-            m_task_type = static_cast<framework::task_type>(s_gap_module_task_type_id);
-        }
-
-        gap_task_type m_gap_task_type = gap_task_type::invalid_type;
-        std::shared_ptr<hci_data> m_hci_response;
-        bool m_connectable = false;
-        bool m_discoverable = false;
-        std::u8string m_localname;
-        bluetooth_address m_address;
-
-        static uint16_t s_gap_module_task_type_id;
-    };
-
     constexpr static const char* s_gap_module_name = "gap_module";
 
     gap_module();
@@ -99,6 +57,8 @@ public:
     void handle_event( std::shared_ptr<framework::framework_event> a_event )override;
 
 private:
+
+    void handle_gap_base_settings( std::shared_ptr<gap_module_task> a_task );
 
     void handle_power_on( std::shared_ptr<gap_module_task> a_task );
 
@@ -135,6 +95,8 @@ private:
     void notify_visiblity_changed();
 
     void changed_local_name( std::u8string const& a_name );
+
+    void handle_ssp_pairing_confirm_result( std::shared_ptr<gap_module_task> a_task );
 
     void relay_hci_event( std::shared_ptr<hci_data> const& a_hci_event );
 

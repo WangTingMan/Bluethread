@@ -14,7 +14,7 @@
  * Commercial closed-source licenses are available upon request.
  */
 
-#include "gap_module.h"
+#include "gap/gap_module.h"
 #include "../hci/hci_command_maker.h"
 #include "../hci/hci_module.h"
 #include "../hci/controller_module.h"
@@ -27,6 +27,7 @@
 #include "../common/bluetooth_common_event.h"
 #include "../common/trusted_devices.h"
 #include "stack/stack_manager.h"
+#include "gap/gap_tasks.h"
 
 #include "framework/log_util.h"
 #include "framework/framework_manager.h"
@@ -42,8 +43,6 @@ namespace bluetooth
 {
 
 using namespace framework;
-
-uint16_t gap_module::gap_module_task::s_gap_module_task_type_id = 0u;
 
 gap_module::gap_module()
 {
@@ -103,60 +102,39 @@ void gap_module::handle_task( std::shared_ptr<abstract_task> a_task )
     task = std::static_pointer_cast< gap_module_task >( a_task );
     if( task )
     {
-        switch( task->m_gap_task_type)
+        switch( task->get_gap_module_task_type() )
         {
-        case gap_task_type::power_on:
-            handle_power_on( task );
-            break;
-        case gap_task_type::power_off:
-            handle_power_off( task );
+        case gap_task_type::gap_base_settings:
+            handle_gap_base_settings( task );
             break;
         case gap_task_type::hci_cmd_response:
             break;
-        case gap_task_type::edr_inquiry:
-            handle_search_task( task );
-            break;
         case gap_task_type::hci_event:
-            handle_hci_event( task->m_hci_response );
-            break;
-        case gap_task_type::to_connectable:
-            set_connectable(true, true );
-            break;
-        case gap_task_type::to_disconnectable:
-            set_connectable( false, true  );
-            break;
-        case gap_task_type::to_discoverable:
-            set_discoverable( true, true );
-            break;
-        case gap_task_type::to_nondiscoverable:
-            set_discoverable( false, true );
+            {
+                auto detail_tsk = std::static_pointer_cast<gap_tsk_hci_event>( task );
+                handle_hci_event( detail_tsk->m_hci_response );
+            }
             break;
         case gap_task_type::visibility_setting:
-            set_visiblility( task->m_discoverable, task->m_connectable );
+            {
+                auto detail_tsk = std::static_pointer_cast<gap_tsk_visibility_setting>( task );
+                set_visiblility( detail_tsk->m_discoverable, detail_tsk->m_connectable );
+            }
             break;
         case gap_task_type::change_local_name:
-            changed_local_name( task->m_localname );
+            {
+                auto detail_tsk = std::static_pointer_cast<gap_tsk_change_local_name>( task );
+                changed_local_name( detail_tsk->m_localname );
+            }
             break;
-        case gap_task_type::cancel_edr_inquiry:
-            handle_cancel_search( task );
-            break;
-        case gap_task_type::to_pairable:
-            m_pairing_manager.set_pairable();
-            break;
-        case gap_task_type::to_unpairable:
-            m_pairing_manager.set_pairable( false );
-            break;
-        case gap_task_type::accept_ssp_confirm:
-            m_pairing_manager.accept_ssp_confrim( task->m_address, true );
-            break;
-        case gap_task_type::reject_ssp_confirm:
-            m_pairing_manager.accept_ssp_confrim( task->m_address, false );
+        case gap_task_type::ssp_pairing_confirm_result:
+            handle_ssp_pairing_confirm_result( task );
             break;
         case gap_task_type::make_edr_acl_connection:
             make_edr_acl( task );
             break;
         default:
-            LogUtilError() << "Ignored task type:" << static_cast< uint16_t >( task->m_gap_task_type);
+            LogUtilError() << "Ignored task type:" << static_cast< uint16_t >( task->get_gap_module_task_type() );
             break;
         }
     }
@@ -174,11 +152,12 @@ void gap_module::handle_event( std::shared_ptr<framework_event> a_event )
         switch( event_type )
         {
         case event_type::power_on:
-            task = std::make_shared<gap_module_task>();
-            task->set_target_module( get_name() );
-            task->set_source_module( get_name() );
-            task->m_gap_task_type = gap_task_type::power_on;
-            framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+            {
+                auto detail_task = std::make_shared<gap_base_settings_task>();
+                detail_task->set_source_module( get_name() );
+                detail_task->m_base_setting = gap_base_settings_type::power_on;
+                framework_manager::get_instance().get_thread_manager().post_task( detail_task, framework::source_here );
+            }
             break;
         case event_type::power_status_changed:
             exe_task = std::make_shared<executable_task>(
@@ -188,11 +167,12 @@ void gap_module::handle_event( std::shared_ptr<framework_event> a_event )
             framework_manager::get_instance().get_thread_manager().post_task( exe_task, framework::source_here );
             break;
         case event_type::power_off:
-            task = std::make_shared<gap_module_task>();
-            task->set_target_module( get_name() );
-            task->set_source_module( get_name() );
-            task->m_gap_task_type = gap_task_type::power_off;
-            framework_manager::get_instance().get_thread_manager().post_task( task, framework::source_here );
+            {
+                auto detail_task = std::make_shared<gap_base_settings_task>();
+                detail_task->set_source_module( get_name() );
+                detail_task->m_base_setting = gap_base_settings_type::power_off;
+                framework_manager::get_instance().get_thread_manager().post_task( detail_task, framework::source_here );
+            }
             break;
         case event_type::derived_type:
             if (bluetooth_common_event::s_bluetooth_common_event_type == a_event->m_derived_type)
@@ -210,6 +190,46 @@ void gap_module::handle_event( std::shared_ptr<framework_event> a_event )
     else
     {
         LogUtilWarning() << "event ignored.";
+    }
+}
+
+void gap_module::handle_gap_base_settings( std::shared_ptr<gap_module_task> a_task )
+{
+    auto detail_tsk = std::static_pointer_cast<gap_base_settings_task>( a_task );
+    switch( detail_tsk->m_base_setting )
+    {
+    case gap_base_settings_type::power_on:
+        handle_power_on( a_task );
+        break;
+    case gap_base_settings_type::power_off:
+        handle_power_off( a_task );
+        break;
+    case gap_base_settings_type::edr_inquiry:
+        handle_search_task( a_task );
+        break;
+    case gap_base_settings_type::to_connectable:
+        set_connectable( true, true );
+        break;
+    case gap_base_settings_type::to_disconnectable:
+        set_connectable( false, true );
+        break;
+    case gap_base_settings_type::to_discoverable:
+        set_discoverable( true, true );
+        break;
+    case gap_base_settings_type::to_nondiscoverable:
+        set_discoverable( false, true );
+        break;
+    case gap_base_settings_type::cancel_edr_inquiry:
+        handle_cancel_search( a_task );
+        break;
+    case gap_base_settings_type::to_pairable:
+        m_pairing_manager.set_pairable();
+        break;
+    case gap_base_settings_type::to_unpairable:
+        m_pairing_manager.set_pairable( false );
+        break;
+    default:
+        LogUtilError() << "base setting task not handled: " << (uint16_t)detail_tsk->m_base_setting;
     }
 }
 
@@ -294,12 +314,10 @@ bool gap_module::handle_other_module_pwr_changed( std::string a_name )
     if( a_name == controller_module::s_controller_module_name )
     {
         LogUtilInfo() << "module power status changed: " << a_name;
-        std::shared_ptr<gap_module_task> task;
-        task = std::make_shared<gap_module_task>();
-        task->set_target_module( get_name() );
-        task->set_source_module( get_name() );
-        task->m_gap_task_type = gap_task_type::power_on;
-        handle_power_on( task );
+        auto detail_task = std::make_shared<gap_base_settings_task>();
+        detail_task->set_source_module( get_name() );
+        detail_task->m_base_setting = gap_base_settings_type::power_on;
+        framework_manager::get_instance().get_thread_manager().post_task( detail_task, framework::source_here );
     }
     return false;
 }
@@ -810,11 +828,16 @@ void gap_module::changed_local_name( std::u8string const& a_name )
         &gap_module::handle_hci_event, this, std::placeholders::_1 ) );
 }
 
+void gap_module::handle_ssp_pairing_confirm_result( std::shared_ptr<gap_module_task> a_task )
+{
+    auto detail_tsk = std::static_pointer_cast<gap_tsk_ssp_pairing_confirm_result>( a_task );
+
+    m_pairing_manager.accept_ssp_confrim( detail_tsk->m_address, detail_tsk->m_accept );
+}
+
 void gap_module::relay_hci_event( std::shared_ptr<hci_data> const& a_hci_event )
 {
-    std::shared_ptr<gap_module_task> tsk = std::make_shared<gap_module_task>();
-    tsk->set_target_module( s_gap_module_name );
-    tsk->m_gap_task_type = gap_task_type::hci_event;
+    std::shared_ptr<gap_tsk_hci_event> tsk = std::make_shared<gap_tsk_hci_event>();
     tsk->m_hci_response = a_hci_event;
     tsk->set_source_module( s_gap_module_name );
     framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
@@ -822,7 +845,8 @@ void gap_module::relay_hci_event( std::shared_ptr<hci_data> const& a_hci_event )
 
 void gap_module::make_edr_acl( std::shared_ptr<gap_module_task> const& a_detail_task )
 {
-    bluetooth_address& remote_device = a_detail_task->m_address;
+    auto detail_tsk = std::static_pointer_cast<gap_tsk_make_edr_acl_connection>( a_detail_task );
+    bluetooth_address& remote_device = detail_tsk->m_address;
 
     bool found = false;
     for( auto& ele : m_acl_cb )

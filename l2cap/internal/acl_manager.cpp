@@ -18,6 +18,7 @@
 #include "endian_convert.h"
 #include "../l2cap_module.h"
 #include "hci/hci_module.h"
+#include "gap/gap_tasks.h"
 
 #include "../../common/acl_connections_db.h"
 #include "framework/log_util.h"
@@ -368,12 +369,10 @@ void acl_manager::handle_request_connection_host
         LogUtilInfo() << "No ACL handle for device " << a_remote_device.to_string()
             << ", to make one.";
 
-        std::shared_ptr<gap_module::gap_module_task> tsk;
-        tsk = std::make_shared<gap_module::gap_module_task>();
-        tsk->m_gap_task_type = gap_module::gap_task_type::make_edr_acl_connection;
+        std::shared_ptr<gap_tsk_make_edr_acl_connection> tsk;
+        tsk = std::make_shared<gap_tsk_make_edr_acl_connection>();
         tsk->set_source_module( l2cap_module::s_l2cap_module_name );
         tsk->m_address = a_remote_device;
-
         framework_manager::get_instance().get_thread_manager().post_task( tsk, framework::source_here );
 
         bool found = false;

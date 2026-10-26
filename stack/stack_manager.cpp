@@ -59,6 +59,12 @@ void s_handle_power_changed( abstract_module::powering_status a_status )
         LogUtilInfo() << "To notify bluetooth power status changed to: "
             << static_cast< uint16_t >( type );
         cb( service_type::not_specified, type, nullptr );
+
+
+        auto con = framework_manager::get_instance().get_info_manager()
+            .get_detail_information<controller>( controller::s_information_name );
+        std::u8string name = con->get_local_name();
+        cb( service_type::not_specified, function_type::local_name_changed, (void*)name.c_str() );
     }
 }
 

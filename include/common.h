@@ -65,6 +65,7 @@ enum class function_type : uint16_t
     pairable_changed, // a_paras type is bool to indicate whether pairable
     ss_pairing_confirm_request,
     paired_device_info, // notify paired device's info, a_paras type is remote_device_info
+    local_name_changed,
 
     /* serial_port_profile */
     serial_connection_status_changed, // a_paras is serial_port_connection_status

@@ -249,7 +249,7 @@ void spp_module::handle_connection_request
     )
 {
     LogUtilDebug() << "handle connection request from " << a_address.to_string()
-        << ", port : " << a_port;
+        << ", port : " << (uint32_t)a_port;
     std::shared_ptr<rfcomm_task_reject_coming_connection_request> tsk;
     auto connection_ = find( a_address, a_port, false );
     if( connection_ )
@@ -356,7 +356,7 @@ void spp_module::handle_connection_changed
         {
             serial_port_connection_status status;
             status.address = reinterpret_cast<void*>( a_address.address );
-            status.port_on_local = a_local_inited;
+            status.port_on_local = !a_local_inited;
             status.status = a_status;
             status.port_number = a_port;
             status.uuids = reinterpret_cast<char*>( local_uuid.data() );
@@ -436,7 +436,7 @@ void spp_module::handle_sdu
             data_recv.data_size = a_size;
             data_recv.p_data = p_sdu;
             data_recv.port_number = a_port;
-            data_recv.port_on_local = a_local_inited;
+            data_recv.port_on_local = !a_local_inited;
 
             stack_manager::get_instance().get_stack_callback()( service_type::serial_port_profile,
                 function_type::serial_port_data_received, reinterpret_cast< void* >( &data_recv ) );
